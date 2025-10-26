@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin • Appointments</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/style.css" />
+  </head>
+  <body>
+    <header class="header">
+      <div class="wrap header-inner">
+        <h1 class="brand">Admin • Appointments</h1>
+        <form method="POST" action="/admin/logout">
+          <button class="btn btn-ghost" type="submit" title="Sign out">Logout</button>
+        </form>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="wrap">
+          <div class="hero-copy">
+            <h2 class="title">Manage bookings</h2>
+            <p class="subtitle">Filter by barber and date to view appointments.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="booking">
+        <div class="wrap">
+          <div class="form" style="margin-bottom: 12px;">
+            <div class="row">
+              <label>
+                <span>Barber</span>
+                <select id="filterBarber">
+                  <option value="">All barbers</option>
+                </select>
+              </label>
+              <label>
+                <span>Date</span>
+                <input type="date" id="filterDate" />
+              </label>
+              <div style="display:flex; align-items:flex-end; gap:8px;">
+                <button id="btnRefresh" class="btn" type="button">Refresh</button>
+                <button id="btnClear" class="btn btn-ghost" type="button">Clear</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table class="table" id="appointmentsTable">
+              <thead>
+                <tr>
+                  <th>Created</th>
+                  <th>Date</th>
+                  <th>Time</th>
+                  <th>Barber</th>
+                  <th>Service</th>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Phone</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td colspan="10" style="text-align:center; color:#666;">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Edit modal -->
+    <div id="editModal" class="modal" hidden>
+      <div class="modal-content">
+        <h3>Edit appointment</h3>
+        <form id="editForm">
+          <input type="hidden" name="_id" id="editId" />
+          <div class="row">
+            <label>
+              <span>Name</span>
+              <input type="text" name="name" id="editName" required />
+            </label>
+            <label>
+              <span>Email</span>
+              <input type="email" name="email" id="editEmail" required />
+            </label>
+          </div>
+          <div class="row">
+            <label>
+              <span>Phone</span>
+              <input type="tel" name="phone" id="editPhone" required />
+            </label>
+            <label>
+              <span>Service</span>
+              <input type="text" name="service" id="editService" required />
+            </label>
+          </div>
+          <div class="row">
+            <label>
+              <span>Barber</span>
+              <select name="barber" id="editBarber" required></select>
+            </label>
+            <label>
+              <span>Date</span>
+              <input type="date" name="date" id="editDate" required />
+            </label>
+            <label>
+              <span>Time</span>
+              <input type="time" name="time" id="editTime" required />
+            </label>
+          </div>
+          <div class="actions">
+            <button type="submit" class="btn">Save</button>
+            <button type="button" class="btn btn-ghost" id="editCancel">Cancel</button>
+            <div id="editMsg" class="msg"></div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <footer class="footer">
+      <div class="wrap">
+        <p>© <span id="year"></span> Admin</p>
+      </div>
+    </footer>
+
+    <script src="/js/admin.js" defer></script>
+  </body>
+</html>

@@ -1,0 +1,25 @@
+{
+	"name": "appointments-app",
+	"version": "1.0.0",
+	"private": true,
+	"description": "Appointments application",
+	"main": "app.js",
+	"scripts": {
+		"start": "node app.js",
+		"dev": "nodemon app.js"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "MIT",
+	"type": "commonjs",
+	"dependencies": {
+		"body-parser": "^2.2.0",
+		"dotenv": "^17.2.3",
+		"ejs": "^3.1.10",
+		"express": "^5.1.0",
+			"mongoose": "^8.19.2",
+			"bcryptjs": "^2.4.3",
+			"express-session": "^1.18.1",
+			"helmet": "^7.1.0"
+	}
+}
