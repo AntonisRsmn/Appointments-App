@@ -1,6 +1,6 @@
 # Barber Shop Booking App
 
-A modern barber shop website with 30-minute appointment booking between 10:00 and 19:00. Choose a barber by name, pick a date, and select an available timeslot.
+A modern barber shop website with 30-minute appointment booking between 10:00 and 20:00. Choose a barber by name, pick a date, and select an available timeslot.
 
 ## Features
 
