@@ -20,10 +20,14 @@ app.use(express.json()); // Needed for fetch POST
 app.use(express.static('public'));
 app.set('view engine', 'ejs');
 
+// Behind a proxy (Render/Heroku/NGINX) we must trust proxy so secure cookies work
+app.set('trust proxy', 1);
+
 // Sessions (for admin auth)
 const SESSION_SECRET = process.env.ADMIN_SESSION_SECRET || process.env.SESSION_SECRET || 'change-me';
 const useMongoStore = !!(process.env.MONGO_URI && MongoStore);
 const dbName = process.env.MONGO_DB_NAME || process.env.DB_NAME || 'appointments-app';
+const IS_PROD = process.env.NODE_ENV === 'production';
 app.use(session({
   name: 'app_session',
   secret: SESSION_SECRET,
@@ -37,8 +41,8 @@ app.use(session({
   }) : undefined,
   cookie: {
     httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    sameSite: IS_PROD ? 'none' : 'lax',
+    secure: IS_PROD,
     maxAge: 1000 * 60 * 60 * 24 * 7
   }
 }));
