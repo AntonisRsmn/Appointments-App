@@ -57,6 +57,9 @@ if (process.env.MONGO_URI) {
 const appointmentRoutes = require('./routes/appointments');
 app.use('/appointments', appointmentRoutes);
 
+// Favicon: serve SVG and redirect legacy .ico requests
+app.get('/favicon.ico', (req, res) => res.redirect(302, '/favicon.svg'));
+
 app.get('/', (req, res) => {
   res.render('index');
 });
