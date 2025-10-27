@@ -122,6 +122,24 @@
   function showModal() { modal.hidden = false; }
   function hideModal() { modal.hidden = true; setEditMsg(''); }
 
+  async function loadEditSlots() {
+    const date = editDate.value;
+    const barber = editBarber.value;
+    editTime.disabled = true;
+    editTime.innerHTML = '<option value="" disabled selected>Select a time…</option>';
+    if (!date || !barber) return;
+    try {
+      const params = new URLSearchParams({ date, barber }).toString();
+      const res = await fetch(`/appointments/slots?${params}`);
+      const slots = await res.json();
+      editTime.innerHTML = '<option value="" disabled selected>Select a time…</option>' +
+        slots.map(s => `<option value="${s}">${s}</option>`).join('');
+      editTime.disabled = false;
+    } catch (e) {
+      setEditMsg('Failed to load available time slots.', 'error');
+    }
+  }
+
   async function openEditModal(id) {
     // Load current item from last fetched list by refetching a filtered all
     try {
@@ -141,7 +159,21 @@
       editBarber.innerHTML = barbers.map(b => `<option value="${b}">${b}</option>`).join('');
       editBarber.value = a.barber || '';
       editDate.value = a.date || '';
-      editTime.value = a.time || '';
+      // Load slots for the current barber and date
+      await loadEditSlots();
+      // Set the time value; if not in slots, add it as an option
+      const currentTime = a.time || '';
+      if (currentTime) {
+        const timeOption = editTime.querySelector(`option[value="${currentTime}"]`);
+        if (!timeOption) {
+          // Add the current time as an extra option if not present
+          const opt = document.createElement('option');
+          opt.value = currentTime;
+          opt.textContent = currentTime;
+          editTime.appendChild(opt);
+        }
+        editTime.value = currentTime;
+      }
       showModal();
     } catch (e) {
       alert('Failed to open editor');
@@ -150,6 +182,9 @@
 
   editCancel?.addEventListener('click', hideModal);
   modal?.addEventListener('click', (e) => { if (e.target === modal) hideModal(); });
+
+  editBarber?.addEventListener('change', loadEditSlots);
+  editDate?.addEventListener('change', loadEditSlots);
 
   editForm?.addEventListener('submit', async (e) => {
     e.preventDefault();
