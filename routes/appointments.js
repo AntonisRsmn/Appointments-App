@@ -119,12 +119,20 @@ async function getAppointmentsByDateBarber(date, barber, store) {
 
 async function isSlotAvailable(date, time, barber, store) {
   if (useMemoryStore) {
-    return !memoryAppointments.some(a => 
-      a.date === date && 
-      a.time === time && 
-      a.barber === barber && 
-      (!store || a.store === store)
-    );
+    if (store) {
+      return !memoryAppointments.some(a => 
+        a.date === date && 
+        a.time === time && 
+        a.barber === barber && 
+        a.store === store
+      );
+    } else {
+      return !memoryAppointments.some(a => 
+        a.date === date && 
+        a.time === time && 
+        a.barber === barber
+      );
+    }
   }
   const filter = { date, time, barber };
   if (store) filter.store = store;
@@ -190,7 +198,7 @@ router.get('/slots', async (req, res) => {
       allSlots = generateSlots();
     }
     
-    const appts = await getAppointmentsByDateBarber(date, barber);
+    const appts = await getAppointmentsByDateBarber(date, barber, store);
     const booked = new Set(appts.map(a => a.time));
     const available = allSlots.filter(s => !booked.has(s));
     res.json(available);
