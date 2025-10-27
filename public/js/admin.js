@@ -1,6 +1,11 @@
 (() => {
+  const STORE_LABELS = {
+    'Nikaia': 'Olympou 11, Nikea 184 54',
+    'Aigaleo': 'Mark. Mpotsari 9, Egaleo 122 41'
+  };
   const table = document.getElementById('appointmentsTable');
   const tbody = table.querySelector('tbody');
+  const filterStore = document.getElementById('filterStore');
   const filterBarber = document.getElementById('filterBarber');
   const filterDate = document.getElementById('filterDate');
   const btnRefresh = document.getElementById('btnRefresh');
@@ -18,7 +23,7 @@
 
   function renderRows(items) {
     if (!items || !items.length) {
-      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color:#666;">No appointments</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; color:#666;">No appointments</td></tr>';
       return;
     }
     tbody.innerHTML = items.map(a => {
@@ -31,6 +36,7 @@
         <td>${fmtDateTime(a.createdAt)}</td>
         <td>${a.date || ''}</td>
         <td>${a.time || ''}</td>
+  <td>${STORE_LABELS[a.store || 'Nikaia'] || (a.store || 'Nikaia')}</td>
         <td>${a.barber || ''}</td>
         <td>${a.service || ''}</td>
         <td>${a.name || ''}</td>
@@ -45,9 +51,27 @@
     }).join('');
   }
 
+  async function loadStores() {
+    try {
+      // If the store select is locked (store-specific admin), set it and disable
+      if (filterStore && filterStore.dataset.locked === 'true') {
+        const s = filterStore.dataset.store || 'Nikaia';
+        filterStore.innerHTML = `<option value="${s}">${STORE_LABELS[s] || s}</option>`;
+        filterStore.value = s;
+        filterStore.disabled = true;
+        return;
+      }
+      const res = await fetch('/appointments/stores');
+      const stores = await res.json();
+      if (filterStore) filterStore.innerHTML = '<option value="">All stores</option>' + stores.map(s => `<option value="${s}">${STORE_LABELS[s] || s}</option>`).join('');
+    } catch (e) { /* noop */ }
+  }
+
   async function loadBarbers() {
     try {
-      const res = await fetch('/appointments/barbers');
+      const params = new URLSearchParams();
+      if (filterStore && filterStore.value) params.set('store', filterStore.value);
+      const res = await fetch('/appointments/barbers' + (params.toString() ? ('?' + params.toString()) : ''));
       const barbers = await res.json();
       filterBarber.innerHTML = '<option value="">All barbers</option>' +
         barbers.map(b => `<option value="${b}">${b}</option>`).join('');
@@ -60,8 +84,9 @@
     const params = new URLSearchParams();
     if (filterBarber.value) params.set('barber', filterBarber.value);
     if (filterDate.value) params.set('date', filterDate.value);
+    if (filterStore && filterStore.value) params.set('store', filterStore.value);
 
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#666;">Loading…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; color:#666;">Loading…</td></tr>';
     try {
       const res = await fetch('/appointments/all' + (params.toString() ? ('?' + params.toString()) : ''));
       const items = await res.json();
@@ -75,8 +100,13 @@
   btnClear?.addEventListener('click', () => {
     filterBarber.value = '';
     filterDate.value = '';
+    if (filterStore && filterStore.dataset.locked !== 'true') filterStore.value = '';
     loadAppointments();
   });
+  filterStore?.addEventListener('change', () => { loadBarbers(); loadAppointments(); });
+  // Auto-refresh when selecting a specific barber or date
+  filterBarber?.addEventListener('change', loadAppointments);
+  filterDate?.addEventListener('change', loadAppointments);
 
   // Row action handlers
   tbody.addEventListener('click', async (e) => {
@@ -108,12 +138,14 @@
   const modal = document.getElementById('editModal');
   const editForm = document.getElementById('editForm');
   const editCancel = document.getElementById('editCancel');
+  const editDelete = document.getElementById('editDelete');
   const editMsg = document.getElementById('editMsg');
   const editId = document.getElementById('editId');
   const editName = document.getElementById('editName');
   const editEmail = document.getElementById('editEmail');
   const editPhone = document.getElementById('editPhone');
   const editService = document.getElementById('editService');
+  const editStore = document.getElementById('editStore');
   const editBarber = document.getElementById('editBarber');
   const editDate = document.getElementById('editDate');
   const editTime = document.getElementById('editTime');
@@ -127,11 +159,12 @@
   async function loadEditSlots() {
     const date = editDate.value;
     const barber = editBarber.value;
+    const store = (editStore && editStore.value) || 'Nikaia';
     editTime.disabled = true;
     editTime.innerHTML = TIME_PLACEHOLDER;
     if (!date || !barber) return;
     try {
-      const params = new URLSearchParams({ date, barber }).toString();
+      const params = new URLSearchParams({ date, barber, store }).toString();
       const res = await fetch(`/appointments/slots?${params}`);
       const slots = await res.json();
       editTime.innerHTML = TIME_PLACEHOLDER +
@@ -155,8 +188,15 @@
       editEmail.value = a.email || '';
       editPhone.value = a.phone || '';
       editService.value = a.service || '';
-      // Fill barbers
-      const resB = await fetch('/appointments/barbers');
+      // Fill stores
+      try {
+        const resStores = await fetch('/appointments/stores');
+        const stores = await resStores.json();
+        if (editStore) editStore.innerHTML = stores.map(s => `<option value="${s}">${s}</option>`).join('');
+      } catch {}
+      if (editStore) editStore.value = a.store || 'Nikaia';
+      // Fill barbers for selected store
+      const resB = await fetch('/appointments/barbers?' + new URLSearchParams({ store: (editStore && editStore.value) || 'Nikaia' }));
       const barbers = await resB.json();
       editBarber.innerHTML = barbers.map(b => `<option value="${b}">${b}</option>`).join('');
       editBarber.value = a.barber || '';
@@ -184,7 +224,34 @@
 
   editCancel?.addEventListener('click', hideModal);
   modal?.addEventListener('click', (e) => { if (e.target === modal) hideModal(); });
+  editDelete?.addEventListener('click', async () => {
+    const id = editId.value;
+    if (!id) return;
+    const sure = confirm('Delete this appointment? This cannot be undone.');
+    if (!sure) return;
+    setEditMsg('Deleting…');
+    try {
+      const res = await fetch(`/appointments/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const txt = await res.text();
+        setEditMsg(txt || 'Failed to delete', 'error');
+        return;
+      }
+      hideModal();
+      await loadAppointments();
+    } catch (err) {
+      setEditMsg('Network error', 'error');
+    }
+  });
 
+  editStore?.addEventListener('change', async () => {
+    try {
+      const resB = await fetch('/appointments/barbers?' + new URLSearchParams({ store: (editStore && editStore.value) || 'Nikaia' }));
+      const barbers = await resB.json();
+      editBarber.innerHTML = barbers.map(b => `<option value="${b}">${b}</option>`).join('');
+    } catch {}
+    await loadEditSlots();
+  });
   editBarber?.addEventListener('change', loadEditSlots);
   editDate?.addEventListener('change', loadEditSlots);
 
@@ -197,6 +264,7 @@
       email: editEmail.value,
       phone: editPhone.value,
       service: editService.value,
+      store: (editStore && editStore.value) || 'Nikaia',
       barber: editBarber.value,
       date: editDate.value,
       time: editTime.value
@@ -215,5 +283,5 @@
     }
   });
 
-  loadBarbers().then(loadAppointments);
+  loadStores().then(loadBarbers).then(loadAppointments);
 })();

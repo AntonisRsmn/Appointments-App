@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Barber Booking</title>
+    <title>NA Cuts Barber Salon</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -12,8 +12,7 @@
   <body>
     <header class="header">
       <div class="wrap header-inner">
-        <h1 class="brand">Barber Studio</h1>
-        <a href="#book" class="btn btn-ghost">Book now</a>
+        <h1 class="brand">NA Cuts Barber Salon</h1>
       </div>
     </header>
 
@@ -24,56 +23,92 @@
             <h2 class="title">Look sharp. Feel confident.</h2>
             <p class="subtitle">Book a <strong>30-minute</strong> slot between <strong>10:00–20:00</strong>. Choose your barber, pick a date, and time.</p>
             <a class="btn" href="#book">Reserve a slot</a>
+            <div class="badges">
+              <span class="badge-chip"><span class="dot"></span> Top-rated barbers</span>
+              <span class="badge-chip"><span class="dot"></span> Walk-ins welcome</span>
+              <span class="badge-chip"><span class="dot"></span> Since 2012</span>
+            </div>
           </div>
+          <div>
+            <div id="book" class="hero-card">
+              <form id="appointmentForm" class="form" action="/appointments/book" method="POST">
+                <input type="hidden" name="service" id="serviceHidden" />
+                <div class="row">
+                  <label>
+                    <span>Name</span>
+                    <input type="text" name="name" placeholder="Your name" required />
+                  </label>
+                  <label>
+                    <span>Email</span>
+                    <input type="email" name="email" placeholder="you@example.com" required />
+                  </label>
+                </div>
+                <div class="row">
+                  <label>
+                    <span>Phone</span>
+                    <input type="tel" name="phone" placeholder="Your phone" required />
+                  </label>
+                  <label>
+                    <span>Store</span>
+                    <select name="store" id="storeSelect" required>
+                      <option value="" disabled selected>Choose a store…</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="row">
+                  <label>
+                    <span>Barber</span>
+                    <select name="barber" id="barberSelect" required disabled>
+                      <option value="" disabled selected>Choose a barber…</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Date</span>
+                    <input type="date" name="date" id="dateInput" required />
+                  </label>
+                  <label>
+                    <span>Time</span>
+                    <select name="time" id="timeSelect" required disabled>
+                      <option value="" disabled selected>Select a time…</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="actions">
+                  <button type="submit" class="btn">Book</button>
+                  <div id="formMessage" role="status" aria-live="polite"></div>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Full-width services section for symmetry and visibility -->
+      <section class="hero" id="services">
+        <div class="wrap">
           <div class="hero-card">
-            <form id="appointmentForm" class="form" action="/appointments/book" method="POST">
-              <div class="row">
-                <label>
-                  <span>Name</span>
-                  <input type="text" name="name" placeholder="Your name" required />
-                </label>
-                <label>
-                  <span>Email</span>
-                  <input type="email" name="email" placeholder="you@example.com" required />
-                </label>
-              </div>
-              <div class="row">
-                <label>
-                  <span>Phone</span>
-                  <input type="tel" name="phone" placeholder="Your phone" required />
-                </label>
-                <label>
-                  <span>Service</span>
-                  <select name="service" required>
-                    <option value="Haircut">Haircut</option>
-                    <option value="Beard Trim">Beard Trim</option>
-                    <option value="Haircut + Beard">Haircut + Beard</option>
-                  </select>
-                </label>
-              </div>
-              <div class="row">
-                <label>
-                  <span>Barber</span>
-                  <select name="barber" id="barberSelect" required>
-                    <option value="" disabled selected>Choose a barber…</option>
-                  </select>
-                </label>
-                <label>
-                  <span>Date</span>
-                  <input type="date" name="date" id="dateInput" required />
-                </label>
-                <label>
-                  <span>Time</span>
-                  <select name="time" id="timeSelect" required disabled>
-                    <option value="" disabled selected>Select a time…</option>
-                  </select>
-                </label>
-              </div>
-              <div class="actions">
-                <button type="submit" class="btn">Book</button>
-                <div id="formMessage" role="status" aria-live="polite"></div>
-              </div>
-            </form>
+            <h3 style="margin:0 0 12px;">Υπηρεσίες</h3>
+            <div id="servicesPicker" class="services"><!-- filled by JS --></div>
+            <div id="selectedServiceNote" class="msg" style="margin-top:8px;"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="contact" class="hero" style="padding-top: 24px;">
+        <div class="wrap">
+          <div class="card" style="display:grid; grid-template-columns: repeat(3,1fr); gap:16px;">
+            <div>
+              <h3 style="margin-bottom:8px;">Olympou 11, Nikea 184 54</h3>
+              <p class="subtitle" style="margin:0;">Mon–Sat: 10:00–20:00<br/>Phone: 211 002 9424</p>
+            </div>
+            <div>
+              <h3 style="margin-bottom:8px;">Mark. Mpotsari 9, Egaleo 122 41</h3>
+              <p class="subtitle" style="margin:0;">Mon–Sat: 10:00–20:00<br/>Phone: 211 006 6752</p>
+            </div>
+            <div>
+              <h3 style="margin-bottom:8px;">Follow</h3>
+              <p class="subtitle" style="margin:0;">Instagram · Facebook · TikTok</p>
+            </div>
           </div>
         </div>
       </section>
@@ -81,7 +116,7 @@
 
     <footer class="footer">
       <div class="wrap">
-        <p>© <span id="year"></span> Barber Studio</p>
+        <p>© <span id="year"></span> NA Cuts Barber Salon — All rights reserved.</p>
       </div>
     </footer>
 

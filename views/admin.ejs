@@ -12,7 +12,7 @@
   <body>
     <header class="header">
       <div class="wrap header-inner">
-        <h1 class="brand">Admin • Appointments</h1>
+  <h1 class="brand">Admin • Appointments<% if (typeof lockedStoreLabel !== 'undefined' && lockedStoreLabel) { %> • <%= lockedStoreLabel %><% } %></h1>
         <form method="POST" action="/admin/logout">
           <button class="btn btn-ghost" type="submit" title="Sign out">Logout</button>
         </form>
@@ -33,6 +33,14 @@
         <div class="wrap">
           <div class="form" style="margin-bottom: 12px;">
             <div class="row">
+              <label>
+                <span>Store</span>
+                <select id="filterStore" <% if (typeof lockedStore !== 'undefined' && lockedStore) { %> data-locked="true" data-store="<%= lockedStore %>" disabled <% } %> >
+                  <% if (!(typeof lockedStore !== 'undefined' && lockedStore)) { %>
+                    <option value="">All stores</option>
+                  <% } %>
+                </select>
+              </label>
               <label>
                 <span>Barber</span>
                 <select id="filterBarber">
@@ -57,6 +65,7 @@
                   <th>Created</th>
                   <th>Date</th>
                   <th>Time</th>
+                  <th>Store</th>
                   <th>Barber</th>
                   <th>Service</th>
                   <th>Name</th>
@@ -67,7 +76,7 @@
                 </tr>
               </thead>
               <tbody>
-                <tr><td colspan="10" style="text-align:center; color:#666;">Loading…</td></tr>
+                <tr><td colspan="11" style="text-align:center; color:#666;">Loading…</td></tr>
               </tbody>
             </table>
           </div>
@@ -103,9 +112,15 @@
           </div>
           <div class="row">
             <label>
+              <span>Store</span>
+              <select name="store" id="editStore" required></select>
+            </label>
+            <label>
               <span>Barber</span>
               <select name="barber" id="editBarber" required></select>
             </label>
+          </div>
+          <div class="row">
             <label>
               <span>Date</span>
               <input type="date" name="date" id="editDate" required />
@@ -120,6 +135,9 @@
           <div class="actions">
             <button type="submit" class="btn">Save</button>
             <button type="button" class="btn btn-ghost" id="editCancel">Cancel</button>
+            <% if (!(typeof lockedStore !== 'undefined' && lockedStore)) { %>
+              <button type="button" class="btn btn-danger" id="editDelete">Delete</button>
+            <% } %>
             <div id="editMsg" class="msg"></div>
           </div>
         </form>

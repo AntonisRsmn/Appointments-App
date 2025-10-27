@@ -52,28 +52,75 @@ function requireAdmin(req, res, next) {
   if (req.session && req.session.isAdmin) return next();
   return res.redirect('/admin/login');
 }
+function requireAdminForStore(store) {
+  return (req, res, next) => {
+    if (req.session && req.session.isAdmin && (req.session.adminStore === store || req.session.adminStore === 'ALL')) return next();
+    return res.redirect(`/admin/${store.toLowerCase()}/login`);
+  };
+}
+function requireAdminAll(req, res, next) {
+  if (req.session && req.session.isAdmin && req.session.adminStore === 'ALL') return next();
+  return res.redirect('/admin/login');
+}
 
-// Admin login/logout routes
+// Admin login/logout routes (support unified login or store-specific)
 app.get('/admin/login', (req, res) => {
-  res.render('login', { error: null });
+  res.render('login', { error: null, loginAction: '/admin/login', storeLabel: null });
 });
 
+app.get('/admin/nikaia/login', (req, res) => {
+  res.render('login', { error: null, loginAction: '/admin/nikaia/login', storeLabel: 'Olympou 11, Nikea 184 54' });
+});
+app.get('/admin/aigaleo/login', (req, res) => {
+  res.render('login', { error: null, loginAction: '/admin/aigaleo/login', storeLabel: 'Mark. Mpotsari 9, Egaleo 122 41' });
+});
+
+// Unified login: decide destination store by password
 app.post('/admin/login', async (req, res) => {
   try {
     const { password } = req.body || {};
-    const hash = process.env.ADMIN_PASSWORD_HASH;
-    if (!hash) {
-      return res.status(500).send('Admin not configured. Please set ADMIN_PASSWORD_HASH in .env');
-    }
-    const ok = await bcrypt.compare(password || '', hash);
-    if (!ok) {
-      return res.status(401).render('login', { error: 'Invalid password' });
+    const isNikaia = await bcrypt.compare(password || '', bcrypt.hashSync('7080616', 10));
+    const isAigaleo = !isNikaia && await bcrypt.compare(password || '', bcrypt.hashSync('7080610', 10));
+    const masterPlain = process.env.ADMIN_MASTER_PASSWORD || process.env.MASTER_ADMIN_PASSWORD || '7080619';
+    const isMaster = !isNikaia && !isAigaleo && await bcrypt.compare(password || '', bcrypt.hashSync(masterPlain, 10));
+    if (!isNikaia && !isAigaleo && !isMaster) {
+      return res.status(401).render('login', { error: 'Invalid password', loginAction: '/admin/login', storeLabel: null });
     }
     req.session.isAdmin = true;
-    res.redirect('/admin');
+    req.session.adminStore = isNikaia ? 'Nikaia' : (isAigaleo ? 'Aigaleo' : 'ALL');
+    if (isMaster) return res.redirect('/admin/all');
+    return res.redirect(isNikaia ? '/admin/nikaia' : '/admin/aigaleo');
   } catch (e) {
     console.error(e);
-    res.status(500).render('login', { error: 'Login error' });
+    res.status(500).render('login', { error: 'Login error', loginAction: '/admin/login', storeLabel: null });
+  }
+});
+
+app.post('/admin/nikaia/login', async (req, res) => {
+  try {
+    const { password } = req.body || {};
+    // Encrypted comparison via bcrypt
+    const ok = await bcrypt.compare(password || '', bcrypt.hashSync('7080616', 10));
+    if (!ok) return res.status(401).render('login', { error: 'Invalid password', loginAction: '/admin/nikaia/login', storeLabel: 'Nikaia' });
+    req.session.isAdmin = true;
+    req.session.adminStore = 'Nikaia';
+    res.redirect('/admin/nikaia');
+  } catch (e) {
+    console.error(e);
+    res.status(500).render('login', { error: 'Login error', loginAction: '/admin/nikaia/login', storeLabel: 'Nikaia' });
+  }
+});
+app.post('/admin/aigaleo/login', async (req, res) => {
+  try {
+    const { password } = req.body || {};
+    const ok = await bcrypt.compare(password || '', bcrypt.hashSync('7080610', 10));
+    if (!ok) return res.status(401).render('login', { error: 'Invalid password', loginAction: '/admin/aigaleo/login', storeLabel: 'Aigaleo' });
+    req.session.isAdmin = true;
+    req.session.adminStore = 'Aigaleo';
+    res.redirect('/admin/aigaleo');
+  } catch (e) {
+    console.error(e);
+    res.status(500).render('login', { error: 'Login error', loginAction: '/admin/aigaleo/login', storeLabel: 'Aigaleo' });
   }
 });
 
@@ -92,9 +139,26 @@ app.get('/admin/logout', (req, res) => {
   });
 });
 
-// Admin page
-app.get('/admin', requireAdmin, (req, res) => {
-  res.render('admin');
+// Admin pages per store
+app.get('/admin/nikaia', requireAdminForStore('Nikaia'), (req, res) => {
+  res.render('admin', { lockedStore: 'Nikaia', lockedStoreLabel: 'Olympou 11, Nikea 184 54' });
+});
+app.get('/admin/aigaleo', requireAdminForStore('Aigaleo'), (req, res) => {
+  res.render('admin', { lockedStore: 'Aigaleo', lockedStoreLabel: 'Mark. Mpotsari 9, Egaleo 122 41' });
+});
+// Aggregated admin page (all stores)
+app.get('/admin/all', requireAdminAll, (req, res) => {
+  // No lockedStore -> UI shows All stores filter and loads everything
+  res.render('admin', { lockedStore: null, lockedStoreLabel: 'All stores' });
+});
+
+// Redirect /admin to login or to the proper store if already authenticated
+app.get('/admin', (req, res) => {
+  if (req.session && req.session.isAdmin && req.session.adminStore) {
+    if (req.session.adminStore === 'ALL') return res.redirect('/admin/all');
+    return res.redirect(req.session.adminStore === 'Nikaia' ? '/admin/nikaia' : '/admin/aigaleo');
+  }
+  return res.redirect('/admin/login');
 });
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

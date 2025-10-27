@@ -8,26 +8,21 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/style.css" />
-    <style>
-      .login { max-width: 420px; margin: 80px auto; border: 1px solid #eaeaea; border-radius: 12px; padding: 16px; background: #fff; }
-      .login h1 { font-size: 22px; margin: 0 0 12px; }
-      .login .error { color: #cc0000; margin-top: 8px; }
-    </style>
   </head>
   <body>
     <header class="header">
       <div class="wrap header-inner">
-        <h1 class="brand">Admin Login</h1>
+        <h1 class="brand">Admin Login <%= typeof storeLabel !== 'undefined' && storeLabel ? '• ' + storeLabel : '' %></h1>
       </div>
     </header>
 
     <main>
       <section class="hero">
-        <div class="wrap" style="display:grid; place-items:center;">
-          <div class="card" style="width:min(520px, 100%);">
+        <div class="wrap center">
+          <div class="card card-narrow">
             <h2 class="title" style="margin-bottom:8px;">Sign in</h2>
             <p class="subtitle" style="margin-bottom:12px;">Enter your admin password to continue.</p>
-            <form method="POST" action="/admin/login">
+            <form method="POST" action="<%= typeof loginAction !== 'undefined' ? loginAction : '/admin/login' %>">
               <label>
                 <span>Password</span>
                 <input type="password" name="password" placeholder="Enter admin password" required />
