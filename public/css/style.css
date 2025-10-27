@@ -119,18 +119,19 @@ input:focus, select:focus { border-color: #cbd5e1; box-shadow: 0 0 0 3px rgba(59
   .cell-actions .btn { width: 100%; }
 }
 
-/* 
+/* Simple modal */
 .modal { position: fixed; inset: 0; background: rgba(0,0,0,0.3); display: grid; place-items: center; }
 .modal[hidden] { display: none; }
 .modal-content { width: min(640px, 94vw); background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); }
 
+/* Simple modal: ensure it sits on top and accepts touch/pointer events on mobile */
 .modal {
   position: fixed;
   inset: 0;
   background: rgba(0,0,0,0.3);
   display: grid;
   place-items: center;
-  z-index: 9999;
+  z-index: 9999; /* ensure modal is above any header or other fixed elements */
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -143,15 +144,15 @@ input:focus, select:focus { border-color: #cbd5e1; box-shadow: 0 0 0 3px rgba(59
   border-radius: 14px;
   padding: 16px;
   box-shadow: 0 10px 30px rgba(0,0,0,0.15);
-  -webkit-overflow-scrolling: touch; 
-  touch-action: manipulation; 
+  -webkit-overflow-scrolling: touch; /* smooth scrolling on iOS if content overflows */
+  touch-action: manipulation; /* improve touch responsiveness */
 }
 
-
+/* Ensure form controls inside modal are touch-friendly */
 .modal-content input,
 .modal-content select,
 .modal-content button {
   touch-action: manipulation;
   -webkit-user-select: auto;
   user-select: auto;
-} */
+}
