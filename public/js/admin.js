@@ -18,7 +18,7 @@
 
   function renderRows(items) {
     if (!items || !items.length) {
-      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color:#666;">No appointments</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; color:#666;">No appointments</td></tr>';
       return;
     }
     tbody.innerHTML = items.map(a => {
@@ -31,6 +31,7 @@
         <td>${fmtDateTime(a.createdAt)}</td>
         <td>${a.date || ''}</td>
         <td>${a.time || ''}</td>
+        <td>${a.store || '-'}</td>
         <td>${a.barber || ''}</td>
         <td>${a.service || ''}</td>
         <td>${a.name || ''}</td>
@@ -61,13 +62,13 @@
     if (filterBarber.value) params.set('barber', filterBarber.value);
     if (filterDate.value) params.set('date', filterDate.value);
 
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#666;">Loading…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; color:#666;">Loading…</td></tr>';
     try {
       const res = await fetch('/appointments/all' + (params.toString() ? ('?' + params.toString()) : ''));
       const items = await res.json();
       renderRows(items);
     } catch (e) {
-      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#c00;">Failed to load</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; color:#c00;">Failed to load</td></tr>';
     }
   }
 
@@ -114,6 +115,7 @@
   const editEmail = document.getElementById('editEmail');
   const editPhone = document.getElementById('editPhone');
   const editService = document.getElementById('editService');
+  const editStore = document.getElementById('editStore');
   const editBarber = document.getElementById('editBarber');
   const editDate = document.getElementById('editDate');
   const editTime = document.getElementById('editTime');
@@ -127,12 +129,14 @@
   async function loadEditSlots() {
     const date = editDate.value;
     const barber = editBarber.value;
+    const store = editStore.value;
     editTime.disabled = true;
     editTime.innerHTML = TIME_PLACEHOLDER;
     if (!date || !barber) return;
     try {
-      const params = new URLSearchParams({ date, barber }).toString();
-      const res = await fetch(`/appointments/slots?${params}`);
+      const params = new URLSearchParams({ date, barber });
+      if (store) params.set('store', store);
+      const res = await fetch(`/appointments/slots?${params.toString()}`);
       const slots = await res.json();
       editTime.innerHTML = TIME_PLACEHOLDER +
         slots.map(s => `<option value="${s}">${s}</option>`).join('');
@@ -155,8 +159,17 @@
       editEmail.value = a.email || '';
       editPhone.value = a.phone || '';
       editService.value = a.service || '';
-      // Fill barbers
-      const resB = await fetch('/appointments/barbers');
+      
+      // Fill stores
+      const resStores = await fetch('/appointments/stores');
+      const stores = await resStores.json();
+      editStore.innerHTML = '<option value="">No store</option>' +
+        stores.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+      editStore.value = a.store || '';
+      
+      // Fill barbers based on store
+      const storeParam = a.store ? `?store=${a.store}` : '';
+      const resB = await fetch(`/appointments/barbers${storeParam}`);
       const barbers = await resB.json();
       editBarber.innerHTML = barbers.map(b => `<option value="${b}">${b}</option>`).join('');
       editBarber.value = a.barber || '';
@@ -185,6 +198,21 @@
   editCancel?.addEventListener('click', hideModal);
   modal?.addEventListener('click', (e) => { if (e.target === modal) hideModal(); });
 
+  editStore?.addEventListener('change', async () => {
+    // Reload barbers when store changes
+    const store = editStore.value;
+    const storeParam = store ? `?store=${store}` : '';
+    try {
+      const res = await fetch(`/appointments/barbers${storeParam}`);
+      const barbers = await res.json();
+      editBarber.innerHTML = barbers.map(b => `<option value="${b}">${b}</option>`).join('');
+      editBarber.value = '';
+      editTime.innerHTML = TIME_PLACEHOLDER;
+      editTime.disabled = true;
+    } catch (e) {
+      setEditMsg('Failed to load barbers.', 'error');
+    }
+  });
   editBarber?.addEventListener('change', loadEditSlots);
   editDate?.addEventListener('change', loadEditSlots);
 
@@ -201,6 +229,7 @@
       date: editDate.value,
       time: editTime.value
     };
+    if (editStore.value) payload.store = editStore.value;
     try {
       const res = await fetch(`/appointments/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const text = await res.text();
@@ -212,6 +241,124 @@
       await loadAppointments();
     } catch (err) {
       setEditMsg('Network error', 'error');
+    }
+  });
+
+  // Create modal logic
+  const btnCreateAppointment = document.getElementById('btnCreateAppointment');
+  const createModal = document.getElementById('createModal');
+  const createForm = document.getElementById('createForm');
+  const createCancel = document.getElementById('createCancel');
+  const createMsg = document.getElementById('createMsg');
+  const createName = document.getElementById('createName');
+  const createEmail = document.getElementById('createEmail');
+  const createPhone = document.getElementById('createPhone');
+  const createService = document.getElementById('createService');
+  const createStore = document.getElementById('createStore');
+  const createBarber = document.getElementById('createBarber');
+  const createDate = document.getElementById('createDate');
+  const createTime = document.getElementById('createTime');
+
+  function setCreateMsg(t, type='info') { createMsg.textContent = t || ''; createMsg.className = `msg ${type}`; }
+  function showCreateModal() { createModal.hidden = false; }
+  function hideCreateModal() { createModal.hidden = true; setCreateMsg(''); }
+
+  async function loadCreateSlots() {
+    const date = createDate.value;
+    const barber = createBarber.value;
+    const store = createStore.value;
+    createTime.disabled = true;
+    createTime.innerHTML = TIME_PLACEHOLDER;
+    if (!date || !barber || !store) return;
+    try {
+      const params = new URLSearchParams({ date, barber, store });
+      const res = await fetch(`/appointments/slots?${params.toString()}`);
+      const slots = await res.json();
+      createTime.innerHTML = TIME_PLACEHOLDER +
+        slots.map(s => `<option value="${s}">${s}</option>`).join('');
+      createTime.disabled = false;
+    } catch (e) {
+      setCreateMsg('Failed to load available time slots.', 'error');
+    }
+  }
+
+  async function openCreateModal() {
+    try {
+      // Reset form
+      createForm.reset();
+      createBarber.disabled = true;
+      createTime.disabled = true;
+      
+      // Load stores
+      const res = await fetch('/appointments/stores');
+      const stores = await res.json();
+      createStore.innerHTML = '<option value="" disabled selected>Select a store…</option>' +
+        stores.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+      
+      // Set min date to today
+      const today = new Date();
+      const yyyy = today.getFullYear();
+      const mm = String(today.getMonth() + 1).padStart(2, '0');
+      const dd = String(today.getDate()).padStart(2, '0');
+      createDate.min = `${yyyy}-${mm}-${dd}`;
+      
+      showCreateModal();
+    } catch (e) {
+      alert('Failed to open create modal');
+    }
+  }
+
+  btnCreateAppointment?.addEventListener('click', openCreateModal);
+  createCancel?.addEventListener('click', hideCreateModal);
+  createModal?.addEventListener('click', (e) => { if (e.target === createModal) hideCreateModal(); });
+
+  createStore?.addEventListener('change', async () => {
+    const store = createStore.value;
+    if (!store) {
+      createBarber.disabled = true;
+      createBarber.innerHTML = '<option value="" disabled selected>Select store first…</option>';
+      return;
+    }
+    try {
+      const res = await fetch(`/appointments/barbers?store=${store}`);
+      const barbers = await res.json();
+      createBarber.innerHTML = '<option value="" disabled selected>Select a barber…</option>' +
+        barbers.map(b => `<option value="${b}">${b}</option>`).join('');
+      createBarber.disabled = false;
+      createTime.innerHTML = TIME_PLACEHOLDER;
+      createTime.disabled = true;
+    } catch (e) {
+      setCreateMsg('Failed to load barbers.', 'error');
+    }
+  });
+
+  createBarber?.addEventListener('change', loadCreateSlots);
+  createDate?.addEventListener('change', loadCreateSlots);
+
+  createForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    setCreateMsg('Creating…');
+    const payload = {
+      name: createName.value,
+      email: createEmail.value,
+      phone: createPhone.value,
+      service: createService.value,
+      store: createStore.value,
+      barber: createBarber.value,
+      date: createDate.value,
+      time: createTime.value
+    };
+    try {
+      const res = await fetch('/appointments/book', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const text = await res.text();
+      if (!res.ok) {
+        setCreateMsg(text || 'Failed to create', 'error');
+        return;
+      }
+      hideCreateModal();
+      await loadAppointments();
+    } catch (err) {
+      setCreateMsg('Network error', 'error');
     }
   });
 
