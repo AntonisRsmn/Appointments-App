@@ -122,17 +122,19 @@
   function showModal() { modal.hidden = false; }
   function hideModal() { modal.hidden = true; setEditMsg(''); }
 
+  const TIME_PLACEHOLDER = '<option value="" disabled selected>Select a time…</option>';
+
   async function loadEditSlots() {
     const date = editDate.value;
     const barber = editBarber.value;
     editTime.disabled = true;
-    editTime.innerHTML = '<option value="" disabled selected>Select a time…</option>';
+    editTime.innerHTML = TIME_PLACEHOLDER;
     if (!date || !barber) return;
     try {
       const params = new URLSearchParams({ date, barber }).toString();
       const res = await fetch(`/appointments/slots?${params}`);
       const slots = await res.json();
-      editTime.innerHTML = '<option value="" disabled selected>Select a time…</option>' +
+      editTime.innerHTML = TIME_PLACEHOLDER +
         slots.map(s => `<option value="${s}">${s}</option>`).join('');
       editTime.disabled = false;
     } catch (e) {
@@ -164,7 +166,7 @@
       // Set the time value; if not in slots, add it as an option
       const currentTime = a.time || '';
       if (currentTime) {
-        const timeOption = editTime.querySelector(`option[value="${currentTime}"]`);
+        const timeOption = editTime.querySelector(`option[value="${CSS.escape(currentTime)}"]`);
         if (!timeOption) {
           // Add the current time as an extra option if not present
           const opt = document.createElement('option');
