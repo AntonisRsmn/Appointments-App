@@ -2,6 +2,10 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
 const session = require('express-session');
+let MongoStore;
+try {
+  MongoStore = require('connect-mongo');
+} catch {}
 const bcrypt = require('bcryptjs');
 const helmet = require('helmet');
 require('dotenv').config();
@@ -18,15 +22,24 @@ app.set('view engine', 'ejs');
 
 // Sessions (for admin auth)
 const SESSION_SECRET = process.env.ADMIN_SESSION_SECRET || process.env.SESSION_SECRET || 'change-me';
+const useMongoStore = !!(process.env.MONGO_URI && MongoStore);
+const dbName = process.env.MONGO_DB_NAME || process.env.DB_NAME || 'appointments-app';
 app.use(session({
   name: 'app_session',
   secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
+  store: useMongoStore ? MongoStore.create({
+    mongoUrl: process.env.MONGO_URI,
+    dbName,
+    collectionName: 'sessions',
+    ttl: 60 * 60 * 24 * 7 // 7 days
+  }) : undefined,
   cookie: {
     httpOnly: true,
     sameSite: 'lax',
-    secure: false // set true if behind HTTPS proxy
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 1000 * 60 * 60 * 24 * 7
   }
 }));
 
