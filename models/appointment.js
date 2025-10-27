@@ -8,6 +8,7 @@ const appointmentSchema = new mongoose.Schema({
   time: { type: String, required: true }, // HH:MM (24h)
   service: { type: String, required: true },
   barber: { type: String, required: true },
+  store: { type: String }, // Optional store ID
   status: { type: String, enum: ['booked', 'completed', 'cancelled'], default: 'booked' }
 }, { timestamps: true });
 

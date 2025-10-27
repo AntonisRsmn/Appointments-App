@@ -13,9 +13,12 @@
     <header class="header">
       <div class="wrap header-inner">
         <h1 class="brand">Admin • Appointments</h1>
-        <form method="POST" action="/admin/logout">
-          <button class="btn btn-ghost" type="submit" title="Sign out">Logout</button>
-        </form>
+        <div style="display: flex; gap: 8px;">
+          <button id="btnCreateAppt" class="btn" type="button">Create appointment</button>
+          <form method="POST" action="/admin/logout">
+            <button class="btn btn-ghost" type="submit" title="Sign out">Logout</button>
+          </form>
+        </div>
       </div>
     </header>
 
@@ -57,6 +60,7 @@
                   <th>Created</th>
                   <th>Date</th>
                   <th>Time</th>
+                  <th>Store</th>
                   <th>Barber</th>
                   <th>Service</th>
                   <th>Name</th>
@@ -67,13 +71,73 @@
                 </tr>
               </thead>
               <tbody>
-                <tr><td colspan="10" style="text-align:center; color:#666;">Loading…</td></tr>
+                <tr><td colspan="11" style="text-align:center; color:#666;">Loading…</td></tr>
               </tbody>
             </table>
           </div>
         </div>
       </section>
     </main>
+
+    <!-- Create modal -->
+    <div id="createModal" class="modal" hidden>
+      <div class="modal-content">
+        <h3>Create appointment</h3>
+        <form id="createForm">
+          <div class="row">
+            <label>
+              <span>Name</span>
+              <input type="text" name="name" id="createName" required />
+            </label>
+            <label>
+              <span>Email</span>
+              <input type="email" name="email" id="createEmail" required />
+            </label>
+          </div>
+          <div class="row">
+            <label>
+              <span>Phone</span>
+              <input type="tel" name="phone" id="createPhone" required />
+            </label>
+            <label>
+              <span>Service</span>
+              <input type="text" name="service" id="createService" required />
+            </label>
+          </div>
+          <div class="row">
+            <label>
+              <span>Store</span>
+              <select name="store" id="createStore" required>
+                <option value="" disabled selected>Select a store…</option>
+              </select>
+            </label>
+            <label>
+              <span>Barber</span>
+              <select name="barber" id="createBarber" required disabled>
+                <option value="" disabled selected>Select a barber…</option>
+              </select>
+            </label>
+            <label>
+              <span>Date</span>
+              <input type="date" name="date" id="createDate" required />
+            </label>
+          </div>
+          <div class="row">
+            <label>
+              <span>Time</span>
+              <select name="time" id="createTime" required disabled>
+                <option value="" disabled selected>Select a time…</option>
+              </select>
+            </label>
+          </div>
+          <div class="actions">
+            <button type="submit" class="btn">Create</button>
+            <button type="button" class="btn btn-ghost" id="createCancel">Cancel</button>
+            <div id="createMsg" class="msg"></div>
+          </div>
+        </form>
+      </div>
+    </div>
 
     <!-- Edit modal -->
     <div id="editModal" class="modal" hidden>
@@ -102,6 +166,12 @@
             </label>
           </div>
           <div class="row">
+            <label>
+              <span>Store</span>
+              <select name="store" id="editStore" required>
+                <option value="" disabled selected>Select a store…</option>
+              </select>
+            </label>
             <label>
               <span>Barber</span>
               <select name="barber" id="editBarber" required></select>

@@ -5,9 +5,12 @@
   const filterDate = document.getElementById('filterDate');
   const btnRefresh = document.getElementById('btnRefresh');
   const btnClear = document.getElementById('btnClear');
+  const btnCreateAppt = document.getElementById('btnCreateAppt');
 
   const y = document.getElementById('year');
   if (y) y.textContent = new Date().getFullYear();
+
+  let stores = [];
 
   function fmtDateTime(iso) {
     if (!iso) return '';
@@ -16,9 +19,15 @@
     return d.toLocaleString();
   }
 
+  function getStoreName(storeId) {
+    if (!storeId) return '';
+    const store = stores.find(s => s.id === storeId);
+    return store ? store.name : storeId;
+  }
+
   function renderRows(items) {
     if (!items || !items.length) {
-      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color:#666;">No appointments</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; color:#666;">No appointments</td></tr>';
       return;
     }
     tbody.innerHTML = items.map(a => {
@@ -31,6 +40,7 @@
         <td>${fmtDateTime(a.createdAt)}</td>
         <td>${a.date || ''}</td>
         <td>${a.time || ''}</td>
+        <td>${getStoreName(a.store)}</td>
         <td>${a.barber || ''}</td>
         <td>${a.service || ''}</td>
         <td>${a.name || ''}</td>
@@ -43,6 +53,15 @@
         </td>
       </tr>`;
     }).join('');
+  }
+
+  async function loadStores() {
+    try {
+      const res = await fetch('/appointments/stores');
+      stores = await res.json();
+    } catch (e) {
+      console.error('Failed to load stores', e);
+    }
   }
 
   async function loadBarbers() {
@@ -61,13 +80,13 @@
     if (filterBarber.value) params.set('barber', filterBarber.value);
     if (filterDate.value) params.set('date', filterDate.value);
 
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#666;">Loading…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; color:#666;">Loading…</td></tr>';
     try {
       const res = await fetch('/appointments/all' + (params.toString() ? ('?' + params.toString()) : ''));
       const items = await res.json();
       renderRows(items);
     } catch (e) {
-      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#c00;">Failed to load</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; color:#c00;">Failed to load</td></tr>';
     }
   }
 
@@ -104,7 +123,126 @@
     }
   });
 
-  // Modal logic
+  // Modal logic - Create
+  const createModal = document.getElementById('createModal');
+  const createForm = document.getElementById('createForm');
+  const createCancel = document.getElementById('createCancel');
+  const createMsg = document.getElementById('createMsg');
+  const createName = document.getElementById('createName');
+  const createEmail = document.getElementById('createEmail');
+  const createPhone = document.getElementById('createPhone');
+  const createService = document.getElementById('createService');
+  const createStore = document.getElementById('createStore');
+  const createBarber = document.getElementById('createBarber');
+  const createDate = document.getElementById('createDate');
+  const createTime = document.getElementById('createTime');
+
+  function setCreateMsg(t, type='info') { createMsg.textContent = t || ''; createMsg.className = `msg ${type}`; }
+  function showCreateModal() { createModal.hidden = false; }
+  function hideCreateModal() { 
+    createModal.hidden = true; 
+    setCreateMsg(''); 
+    createForm.reset();
+    createBarber.disabled = true;
+    createTime.disabled = true;
+  }
+
+  async function loadCreateStores() {
+    createStore.innerHTML = '<option value="" disabled selected>Select a store…</option>' +
+      stores.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  }
+
+  async function loadCreateBarbers(storeId) {
+    createBarber.disabled = true;
+    createBarber.innerHTML = '<option value="" disabled selected>Select a barber…</option>';
+    createTime.disabled = true;
+    createTime.innerHTML = '<option value="" disabled selected>Select a time…</option>';
+    
+    if (!storeId) return;
+    
+    try {
+      const res = await fetch(`/appointments/barbers?store=${storeId}`);
+      const barbers = await res.json();
+      createBarber.innerHTML = '<option value="" disabled selected>Select a barber…</option>' +
+        barbers.map(b => `<option value="${b}">${b}</option>`).join('');
+      createBarber.disabled = false;
+    } catch (e) {
+      setCreateMsg('Failed to load barbers', 'error');
+    }
+  }
+
+  async function loadCreateSlots() {
+    const store = createStore.value;
+    const barber = createBarber.value;
+    const date = createDate.value;
+    
+    createTime.disabled = true;
+    createTime.innerHTML = '<option value="" disabled selected>Select a time…</option>';
+    
+    if (!store || !barber || !date) return;
+    
+    try {
+      const params = new URLSearchParams({ store, barber, date }).toString();
+      const res = await fetch(`/appointments/slots?${params}`);
+      const slots = await res.json();
+      createTime.innerHTML = '<option value="" disabled selected>Select a time…</option>' +
+        slots.map(s => `<option value="${s}">${s}</option>`).join('');
+      createTime.disabled = false;
+    } catch (e) {
+      setCreateMsg('Failed to load available time slots', 'error');
+    }
+  }
+
+  btnCreateAppt?.addEventListener('click', () => {
+    loadCreateStores();
+    showCreateModal();
+  });
+
+  createCancel?.addEventListener('click', hideCreateModal);
+  createModal?.addEventListener('click', (e) => { if (e.target === createModal) hideCreateModal(); });
+
+  createStore?.addEventListener('change', () => {
+    loadCreateBarbers(createStore.value);
+  });
+
+  createBarber?.addEventListener('change', loadCreateSlots);
+  createDate?.addEventListener('change', loadCreateSlots);
+
+  createForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    setCreateMsg('Creating…');
+    
+    const payload = {
+      name: createName.value,
+      email: createEmail.value,
+      phone: createPhone.value,
+      service: createService.value,
+      store: createStore.value,
+      barber: createBarber.value,
+      date: createDate.value,
+      time: createTime.value
+    };
+    
+    try {
+      const res = await fetch('/appointments/book', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify(payload) 
+      });
+      const text = await res.text();
+      if (!res.ok) {
+        setCreateMsg(text || 'Failed to create appointment', 'error');
+        return;
+      }
+      hideCreateModal();
+      await loadAppointments();
+    } catch (err) {
+      setCreateMsg('Network error', 'error');
+    }
+  });
+
+  // Modal logic - Edit
+  // Modal logic - Edit
   const modal = document.getElementById('editModal');
   const editForm = document.getElementById('editForm');
   const editCancel = document.getElementById('editCancel');
@@ -114,6 +252,7 @@
   const editEmail = document.getElementById('editEmail');
   const editPhone = document.getElementById('editPhone');
   const editService = document.getElementById('editService');
+  const editStore = document.getElementById('editStore');
   const editBarber = document.getElementById('editBarber');
   const editDate = document.getElementById('editDate');
   const editTime = document.getElementById('editTime');
@@ -124,14 +263,33 @@
 
   const TIME_PLACEHOLDER = '<option value="" disabled selected>Select a time…</option>';
 
+  async function loadEditBarbers(storeId) {
+    editBarber.disabled = true;
+    editBarber.innerHTML = '<option value="" disabled selected>Select a barber…</option>';
+    editTime.disabled = true;
+    editTime.innerHTML = TIME_PLACEHOLDER;
+    
+    if (!storeId) return;
+    
+    try {
+      const res = await fetch(`/appointments/barbers?store=${storeId}`);
+      const barbers = await res.json();
+      editBarber.innerHTML = barbers.map(b => `<option value="${b}">${b}</option>`).join('');
+      editBarber.disabled = false;
+    } catch (e) {
+      setEditMsg('Failed to load barbers', 'error');
+    }
+  }
+
   async function loadEditSlots() {
+    const store = editStore.value;
     const date = editDate.value;
     const barber = editBarber.value;
     editTime.disabled = true;
     editTime.innerHTML = TIME_PLACEHOLDER;
-    if (!date || !barber) return;
+    if (!date || !barber || !store) return;
     try {
-      const params = new URLSearchParams({ date, barber }).toString();
+      const params = new URLSearchParams({ store, date, barber }).toString();
       const res = await fetch(`/appointments/slots?${params}`);
       const slots = await res.json();
       editTime.innerHTML = TIME_PLACEHOLDER +
@@ -149,20 +307,27 @@
       const items = await res.json();
       const a = items.find(x => String(x._id) === String(id));
       if (!a) return alert('Appointment not found');
+      
       // Populate fields
       editId.value = a._id;
       editName.value = a.name || '';
       editEmail.value = a.email || '';
       editPhone.value = a.phone || '';
       editService.value = a.service || '';
-      // Fill barbers
-      const resB = await fetch('/appointments/barbers');
-      const barbers = await resB.json();
-      editBarber.innerHTML = barbers.map(b => `<option value="${b}">${b}</option>`).join('');
+      
+      // Fill stores
+      editStore.innerHTML = stores.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+      editStore.value = a.store || '';
+      
+      // Load barbers for the store
+      await loadEditBarbers(a.store);
       editBarber.value = a.barber || '';
+      
       editDate.value = a.date || '';
-      // Load slots for the current barber and date
+      
+      // Load slots for the current store/barber/date
       await loadEditSlots();
+      
       // Set the time value; if not in slots, add it as an option
       const currentTime = a.time || '';
       if (currentTime) {
@@ -185,6 +350,10 @@
   editCancel?.addEventListener('click', hideModal);
   modal?.addEventListener('click', (e) => { if (e.target === modal) hideModal(); });
 
+  editStore?.addEventListener('change', async () => {
+    await loadEditBarbers(editStore.value);
+  });
+  
   editBarber?.addEventListener('change', loadEditSlots);
   editDate?.addEventListener('change', loadEditSlots);
 
@@ -197,6 +366,7 @@
       email: editEmail.value,
       phone: editPhone.value,
       service: editService.value,
+      store: editStore.value,
       barber: editBarber.value,
       date: editDate.value,
       time: editTime.value
@@ -215,5 +385,7 @@
     }
   });
 
-  loadBarbers().then(loadAppointments);
+  loadStores().then(() => {
+    loadBarbers().then(loadAppointments);
+  });
 })();

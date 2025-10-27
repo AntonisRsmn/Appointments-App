@@ -2,7 +2,27 @@ const express = require('express');
 const router = express.Router();
 const Appointment = require('../models/appointment');
 
-// Config: Available barbers and business hours
+// Config: Available stores with their barbers and operating hours
+const STORES = [
+  { 
+    id: 'nikaia', 
+    name: 'Nikaia', 
+    barbers: ['Nikos Ανδρεάκος', 'Stelios Καραλατόπουλος'], 
+    start: '10:00', 
+    end: '20:00', 
+    slotMinutes: 30 
+  },
+  { 
+    id: 'aigaleo', 
+    name: 'Aigaleo', 
+    barbers: ['Giorgos Papadopoulos', 'Kostas Yiannou'], 
+    start: '09:00', 
+    end: '17:00', 
+    slotMinutes: 30 
+  }
+];
+
+// Legacy: Available barbers and business hours (for backwards compatibility)
 const BARBERS = [
   'Νίκος Ανδρεάκος',
   'Στέλιος Καρλαφτόπουλος',
@@ -17,15 +37,33 @@ const useMemoryStore = !process.env.MONGO_URI;
 const memoryAppointments = [];
 let memoryIdCounter = 1;
 
-function generateSlots() {
+function generateSlots(startTime, endTime, slotMinutes) {
+  // If no params provided, use legacy defaults
+  if (!startTime || !endTime || !slotMinutes) {
+    startTime = `${OPEN_HOUR}:00`;
+    endTime = `${CLOSE_HOUR}:00`;
+    slotMinutes = SLOT_MINUTES;
+  }
+  
   const slots = [];
-  for (let h = OPEN_HOUR; h < CLOSE_HOUR; h++) {
-    for (let m = 0; m < 60; m += SLOT_MINUTES) {
-      const hh = `${h}`.padStart(2, '0');
-      const mm = `${m}`.padStart(2, '0');
-      slots.push(`${hh}:${mm}`);
+  const [startH, startM] = startTime.split(':').map(Number);
+  const [endH, endM] = endTime.split(':').map(Number);
+  
+  let h = startH;
+  let m = startM;
+  
+  while (h < endH || (h === endH && m < endM)) {
+    const hh = `${h}`.padStart(2, '0');
+    const mm = `${m}`.padStart(2, '0');
+    slots.push(`${hh}:${mm}`);
+    
+    m += slotMinutes;
+    if (m >= 60) {
+      h += Math.floor(m / 60);
+      m = m % 60;
     }
   }
+  
   return slots;
 }
 
@@ -33,13 +71,30 @@ function isValidSlot(time) {
   return generateSlots().includes(time);
 }
 
-function validatePayload({ name, email, phone, date, time, service, barber }) {
+function validatePayload({ name, email, phone, date, time, service, barber, store }) {
   if (!name || !email || !phone || !date || !time || !service || !barber) {
     return 'Missing required fields';
   }
-  if (!BARBERS.includes(barber)) {
+  
+  // Validate barber (either in legacy list or in a store)
+  const barberInLegacy = BARBERS.includes(barber);
+  const barberInAnyStore = STORES.some(s => s.barbers.includes(barber));
+  
+  if (!barberInLegacy && !barberInAnyStore) {
     return 'Invalid barber';
   }
+  
+  // If store is specified, validate it
+  if (store) {
+    const storeObj = STORES.find(s => s.id === store);
+    if (!storeObj) {
+      return 'Invalid store';
+    }
+    if (!storeObj.barbers.includes(barber)) {
+      return 'Barber not found in specified store';
+    }
+  }
+  
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return 'Invalid date format';
   }
@@ -49,38 +104,92 @@ function validatePayload({ name, email, phone, date, time, service, barber }) {
   return null;
 }
 
-async function getAppointmentsByDateBarber(date, barber) {
+async function getAppointmentsByDateBarber(date, barber, store) {
   if (useMemoryStore) {
-    return memoryAppointments.filter(a => a.date === date && a.barber === barber);
+    let filtered = memoryAppointments.filter(a => a.date === date && a.barber === barber);
+    if (store) {
+      filtered = filtered.filter(a => a.store === store);
+    }
+    return filtered;
   }
-  return Appointment.find({ date, barber }).lean();
+  const filter = { date, barber };
+  if (store) filter.store = store;
+  return Appointment.find(filter).lean();
 }
 
-async function isSlotAvailable(date, time, barber) {
+async function isSlotAvailable(date, time, barber, store) {
   if (useMemoryStore) {
-    return !memoryAppointments.some(a => a.date === date && a.time === time && a.barber === barber);
+    return !memoryAppointments.some(a => 
+      a.date === date && 
+      a.time === time && 
+      a.barber === barber && 
+      (!store || a.store === store)
+    );
   }
-  const existing = await Appointment.findOne({ date, time, barber }).lean();
+  const filter = { date, time, barber };
+  if (store) filter.store = store;
+  const existing = await Appointment.findOne(filter).lean();
   return !existing;
 }
 
+// GET list of stores
+router.get('/stores', (req, res) => {
+  res.json(STORES);
+});
+
 // GET list of barbers
 router.get('/barbers', (req, res) => {
-  res.json(BARBERS);
+  const { store } = req.query;
+  
+  if (store) {
+    const storeObj = STORES.find(s => s.id === store);
+    if (!storeObj) {
+      return res.status(400).json({ error: 'Invalid store' });
+    }
+    return res.json(storeObj.barbers);
+  }
+  
+  // Return union of all barbers (backwards compatibility)
+  const allBarbers = new Set();
+  STORES.forEach(s => s.barbers.forEach(b => allBarbers.add(b)));
+  BARBERS.forEach(b => allBarbers.add(b));
+  res.json(Array.from(allBarbers));
 });
 
 // GET available slots for a date and barber
 router.get('/slots', async (req, res) => {
   try {
-    const { date, barber } = req.query;
+    const { date, barber, store } = req.query;
     if (!date || !barber) {
       return res.status(400).json({ error: 'date and barber are required' });
     }
-    if (!BARBERS.includes(barber)) {
-      return res.status(400).json({ error: 'Invalid barber' });
+    
+    // Validate barber exists in specified store or globally
+    let storeObj = null;
+    if (store) {
+      storeObj = STORES.find(s => s.id === store);
+      if (!storeObj) {
+        return res.status(400).json({ error: 'Invalid store' });
+      }
+      if (!storeObj.barbers.includes(barber)) {
+        return res.status(400).json({ error: 'Barber not found in specified store' });
+      }
+    } else if (!BARBERS.includes(barber)) {
+      // Check if barber exists in any store
+      const barberInAnyStore = STORES.some(s => s.barbers.includes(barber));
+      if (!barberInAnyStore) {
+        return res.status(400).json({ error: 'Invalid barber' });
+      }
     }
 
-    const allSlots = generateSlots();
+    // Generate slots based on store hours or legacy hours
+    let allSlots;
+    if (storeObj) {
+      allSlots = generateSlots(storeObj.start, storeObj.end, storeObj.slotMinutes);
+    } else {
+      allSlots = generateSlots();
+    }
+    
     const appts = await getAppointmentsByDateBarber(date, barber);
     const booked = new Set(appts.map(a => a.time));
     const available = allSlots.filter(s => !booked.has(s));
@@ -96,24 +205,28 @@ router.post('/book', async (req, res) => {
     const error = validatePayload(req.body || {});
     if (error) return res.status(400).send(error);
 
-    const { name, email, phone, date, time, service, barber } = req.body;
+    const { name, email, phone, date, time, service, barber, store } = req.body;
 
-    const available = await isSlotAvailable(date, time, barber);
+    const available = await isSlotAvailable(date, time, barber, store);
     if (!available) {
       return res.status(409).send('Selected time is no longer available');
     }
 
     if (useMemoryStore) {
-      memoryAppointments.push({
+      const newAppt = {
         _id: String(memoryIdCounter++),
         name, email, phone, date, time, service, barber,
         status: 'booked',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
-      });
+      };
+      if (store) newAppt.store = store;
+      memoryAppointments.push(newAppt);
     } else {
       try {
-        await new Appointment({ name, email, phone, date, time, service, barber, status: 'booked' }).save();
+        const apptData = { name, email, phone, date, time, service, barber, status: 'booked' };
+        if (store) apptData.store = store;
+        await new Appointment(apptData).save();
       } catch (e) {
         // Handle unique index conflict cleanly
         if (e && e.code === 11000) {
@@ -194,10 +307,10 @@ router.patch('/:id/status', requireAdmin, async (req, res) => {
 router.put('/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, email, phone, date, time, service, barber, status } = req.body || {};
+    const { name, email, phone, date, time, service, barber, status, store } = req.body || {};
 
     // Validate basic fields if provided
-    const payload = { name, email, phone, date, time, service, barber };
+    const payload = { name, email, phone, date, time, service, barber, store };
     const errMsg = validatePayload(payload);
     if (errMsg) return res.status(400).json({ error: errMsg });
 
@@ -205,18 +318,28 @@ router.put('/:id', requireAdmin, async (req, res) => {
     if (useMemoryStore) {
       const current = memoryAppointments.find(a => String(a._id) === String(id));
       if (!current) return res.status(404).json({ error: 'Not found' });
-      const conflict = memoryAppointments.some(a => a.barber === barber && a.date === date && a.time === time && String(a._id) !== String(id));
+      const conflict = memoryAppointments.some(a => 
+        a.barber === barber && 
+        a.date === date && 
+        a.time === time && 
+        String(a._id) !== String(id) &&
+        (!store || a.store === store)
+      );
       if (conflict) return res.status(409).json({ error: 'Selected time is no longer available' });
       Object.assign(current, { name, email, phone, date, time, service, barber });
+      if (store) current.store = store;
       if (status && ['booked', 'completed', 'cancelled'].includes(status)) current.status = status;
       current.updatedAt = new Date().toISOString();
       return res.json(current);
     }
 
-    const conflict = await Appointment.findOne({ barber, date, time, _id: { $ne: id } }).lean();
+    const filter = { barber, date, time, _id: { $ne: id } };
+    if (store) filter.store = store;
+    const conflict = await Appointment.findOne(filter).lean();
     if (conflict) return res.status(409).json({ error: 'Selected time is no longer available' });
 
     const update = { name, email, phone, date, time, service, barber };
+    if (store) update.store = store;
     if (status && ['booked', 'completed', 'cancelled'].includes(status)) update.status = status;
     const appt = await Appointment.findByIdAndUpdate(id, update, { new: true }).lean();
     if (!appt) return res.status(404).json({ error: 'Not found' });
