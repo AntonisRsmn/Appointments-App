@@ -32,7 +32,8 @@ app.use(session({
 
 // Database (optional). Start server even if MONGO_URI is not set.
 if (process.env.MONGO_URI) {
-  mongoose.connect(process.env.MONGO_URI)
+  const dbName = process.env.MONGO_DB_NAME || process.env.DB_NAME || 'appointments-app';
+  mongoose.connect(process.env.MONGO_URI, { dbName })
     .then(() => console.log('MongoDB connected'))
     .catch(err => console.error('MongoDB connection error:', err.message));
 } else {

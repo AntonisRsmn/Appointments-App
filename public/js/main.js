@@ -46,6 +46,21 @@
     }
     // Clear any previous error near the Book button when a selection is made
     if (name) clearMessage();
+    // If clearing the selection, also remove any visual selection in the services list
+    if (!name) {
+      clearServiceSelectionVisuals();
+    }
+  }
+
+  function clearServiceSelectionVisuals() {
+    if (!servicesPicker) return;
+    // Remove selected row highlight
+    servicesPicker.querySelectorAll('.service-item.selected').forEach(el => el.classList.remove('selected'));
+    // Reset any selected buttons back to "Επιλογή"
+    servicesPicker.querySelectorAll('button[data-name].selected').forEach(btn => {
+      btn.classList.remove('selected');
+      btn.textContent = 'Επιλογή';
+    });
   }
 
   async function loadServices() {
@@ -163,10 +178,12 @@
       const res = await fetch('/appointments/barbers?' + new URLSearchParams({ store }));
       const barbers = await res.json();
       const anyoneOption = `<option value=\"ANY\">Οποιοσδήποτε Υπάλληλος</option>`;
-      barberSelect.innerHTML = '<option value="" disabled selected>Choose a barber…</option>' +
+      barberSelect.innerHTML = '<option value=\"\" disabled>Choose a barber…</option>' +
         anyoneOption +
-        barbers.map(b => `<option value="${b}">${b}</option>`).join('');
+        barbers.map(b => `<option value=\"${b}\">${b}</option>`).join('');
       barberSelect.disabled = false;
+      // Default to Οποιοσδήποτε Υπάλληλος
+      barberSelect.value = 'ANY';
     } catch (e) {
       setMessage('Failed to load barbers.', 'error');
     }
@@ -252,10 +269,35 @@
   timeSelect.innerHTML = '<option value="" disabled selected>Select a barber and date first…</option>';
   timeSelect.disabled = true;
   barberSelect.disabled = true;
+  // Reset all form fields on page load/refresh
+  function resetFormState() {
+    try { form?.reset(); } catch {}
+    clearMessage();
+    setSelectedService('', null);
+    // Reset selects explicitly
+    if (storeSelect) storeSelect.value = '';
+    if (barberSelect) {
+      barberSelect.disabled = true;
+      barberSelect.innerHTML = '<option value="" disabled selected>Choose a barber…</option>';
+    }
+    if (dateInput) dateInput.value = '';
+    if (timeSelect) {
+      timeSelect.disabled = true;
+      timeSelect.innerHTML = '<option value="" disabled selected>Select a barber and date first…</option>';
+    }
+  }
+  resetFormState();
   loadStores();
   loadServices();
 
   // Ensure no preselected service (in case of browser autofill/back nav)
   if (serviceHidden) serviceHidden.value = '';
+  // Also clear any visual selection on initial load and when navigating back to the page
+  clearServiceSelectionVisuals();
+  window.addEventListener('pageshow', () => {
+    // In case of bfcache restore, ensure UI reflects no selection
+    resetFormState();
+    if (!serviceHidden.value) clearServiceSelectionVisuals();
+  });
   // Keep Book button enabled so users see inline error if they haven't selected a service
 })();
