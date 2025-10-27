@@ -162,7 +162,9 @@
       const store = storeSelect.value || 'Nikaia';
       const res = await fetch('/appointments/barbers?' + new URLSearchParams({ store }));
       const barbers = await res.json();
+      const anyoneOption = `<option value=\"ANY\">Οποιοσδήποτε Υπάλληλος</option>`;
       barberSelect.innerHTML = '<option value="" disabled selected>Choose a barber…</option>' +
+        anyoneOption +
         barbers.map(b => `<option value="${b}">${b}</option>`).join('');
       barberSelect.disabled = false;
     } catch (e) {
@@ -187,7 +189,7 @@
       const slots = await res.json();
       if (!Array.isArray(slots) || slots.length === 0) {
         timeSelect.innerHTML = '<option value="" disabled selected>No times available</option>';
-        timeSelect.disabled = false;
+        timeSelect.disabled = true;
       } else {
         timeSelect.innerHTML = '<option value="" disabled selected>Select a time…</option>' +
           slots.map(s => `<option value="${s}">${s}</option>`).join('');

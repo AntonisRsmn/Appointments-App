@@ -55,7 +55,8 @@ function requireAdmin(req, res, next) {
 function requireAdminForStore(store) {
   return (req, res, next) => {
     if (req.session && req.session.isAdmin && (req.session.adminStore === store || req.session.adminStore === 'ALL')) return next();
-    return res.redirect(`/admin/${store.toLowerCase()}/login`);
+    // Redirect to unified login regardless of store
+    return res.redirect('/admin/login');
   };
 }
 function requireAdminAll(req, res, next) {

@@ -54,6 +54,7 @@
               <div style="display:flex; align-items:flex-end; gap:8px;">
                 <button id="btnRefresh" class="btn" type="button">Refresh</button>
                 <button id="btnClear" class="btn btn-ghost" type="button">Clear</button>
+                <button id="btnCreate" class="btn btn-success" type="button">Create</button>
               </div>
             </div>
           </div>
@@ -107,7 +108,9 @@
             </label>
             <label>
               <span>Service</span>
-              <input type="text" name="service" id="editService" required />
+              <select name="service" id="editService" required>
+                <option value="" disabled selected>Choose a service…</option>
+              </select>
             </label>
           </div>
           <div class="row">

@@ -148,15 +148,24 @@ router.get('/slots', async (req, res) => {
       return res.status(400).json({ error: 'date and barber are required' });
     }
     const validBarbers = getBarbersForStore(store);
-    if (!validBarbers.includes(barber)) {
+    const isAny = (barber === 'ANY' || barber === 'Anyone');
+    if (!isAny && !validBarbers.includes(barber)) {
       return res.status(400).json({ error: 'Invalid barber' });
     }
 
     const allSlots = generateSlots();
-    const appts = await getAppointmentsByDateBarber(date, barber, store);
-    const booked = new Set(appts.map(a => a.time));
-    const available = allSlots.filter(s => !booked.has(s));
-    res.json(available);
+    if (isAny) {
+      // Return slots where at least one barber is free
+      const lists = await Promise.all(validBarbers.map(b => getAppointmentsByDateBarber(date, b, store)));
+      const bookedSets = lists.map(list => new Set(list.map(a => a.time)));
+      const available = allSlots.filter(s => bookedSets.some(set => !set.has(s)));
+      return res.json(available);
+    } else {
+      const appts = await getAppointmentsByDateBarber(date, barber, store);
+      const booked = new Set(appts.map(a => a.time));
+      const available = allSlots.filter(s => !booked.has(s));
+      return res.json(available);
+    }
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch slots' });
   }
@@ -167,10 +176,26 @@ router.post('/book', async (req, res) => {
   try {
     const payload = { ...(req.body || {}) };
     if (!payload.store) payload.store = 'Nikaia';
-    const error = validatePayload(payload);
-    if (error) return res.status(400).send(error);
+    let { name, email, phone, date, time, service, barber, store } = payload;
 
-    const { name, email, phone, date, time, service, barber, store } = payload;
+    // If barber is ANY/Anyone, pick an available barber for this slot
+    if (barber === 'ANY' || barber === 'Anyone') {
+      const candidates = getBarbersForStore(store);
+      let chosen = null;
+      for (const b of candidates) {
+        // eslint-disable-next-line no-await-in-loop
+        const free = await isSlotAvailable(date, time, b, store);
+        if (free) { chosen = b; break; }
+      }
+      if (!chosen) {
+        return res.status(409).send('Selected time is no longer available');
+      }
+      barber = chosen;
+      payload.barber = chosen;
+    }
+
+    const error = validatePayload({ name, email, phone, date, time, service, barber, store });
+    if (error) return res.status(400).send(error);
 
     const available = await isSlotAvailable(date, time, barber, store);
     if (!available) {
