@@ -2,6 +2,7 @@
   const form = document.getElementById('appointmentForm');
   const msgEl = document.getElementById('formMessage');
   const serviceHidden = document.getElementById('serviceHidden');
+  let selectedServiceInfo = null; // { durationMinutes, price }
   const servicesPicker = document.getElementById('servicesPicker');
   const selectedServiceNote = document.getElementById('selectedServiceNote');
   const storeSelect = document.getElementById('storeSelect');
@@ -44,11 +45,16 @@
         selectedServiceNote.textContent = '';
       }
     }
+    selectedServiceInfo = info || null;
     // Clear any previous error near the Book button when a selection is made
     if (name) clearMessage();
     // If clearing the selection, also remove any visual selection in the services list
     if (!name) {
       clearServiceSelectionVisuals();
+    }
+    // If user already picked store/barber/date, refresh slots to reflect selected service duration
+    if (storeSelect.value && barberSelect.value && dateInput.value) {
+      loadSlots();
     }
   }
 
@@ -63,10 +69,13 @@
     });
   }
 
-  async function loadServices() {
+  async function loadServices(storeOverride) {
     if (!servicesPicker) return;
     try {
-      const res = await fetch('/appointments/services');
+      const params = new URLSearchParams();
+      const store = storeOverride || storeSelect?.value || 'Nikaia';
+      if (store) params.set('store', store);
+      const res = await fetch('/appointments/services' + (params.toString() ? ('?' + params.toString()) : ''));
       const byCat = await res.json();
       const cats = Object.keys(byCat);
       if (!cats.length) return;
@@ -123,7 +132,7 @@
         setActive(el.dataset.cat);
       });
 
-      servicesPicker.replaceChildren(catList, listWrap);
+  servicesPicker.replaceChildren(catList, listWrap);
       setActive(cats[0]);
 
       listWrap.addEventListener('click', (e) => {
@@ -162,8 +171,8 @@
       const res = await fetch('/appointments/stores');
       const stores = await res.json();
       const STORE_LABELS = {
-        'Nikaia': 'Olympou 11, Nikea 184 54',
-        'Aigaleo': 'Mark. Mpotsari 9, Egaleo 122 41'
+        'Nikaia': 'Ολύμπου 11, Νίκαια',
+        'Aigaleo': 'Μαρκ. Μπότσαρη 9, Αιγάλεω'
       };
       storeSelect.innerHTML = '<option value="" disabled selected>Choose a store…</option>' +
         stores.map(s => `<option value="${s}">${STORE_LABELS[s] || s}</option>`).join('');
@@ -193,15 +202,16 @@
     const date = dateInput.value;
     const barber = barberSelect.value;
     const store = storeSelect.value || 'Nikaia';
+    const duration = selectedServiceInfo?.durationMinutes || null;
     // Guard when store/barber/date are not selected
-    if (!store || !barber || !date) {
-      timeSelect.innerHTML = '<option value="" disabled selected>Select a barber and date first…</option>';
+    if (!store || !barber || !date || !duration) {
+      timeSelect.innerHTML = '<option value="" disabled selected>Select a service, barber and date first…</option>';
       timeSelect.disabled = true;
       return;
     }
     timeSelect.disabled = true;
     try {
-      const params = new URLSearchParams({ date, barber, store }).toString();
+      const params = new URLSearchParams({ date, barber, store, duration }).toString();
       const res = await fetch(`/appointments/slots?${params}`);
       const slots = await res.json();
       if (!Array.isArray(slots) || slots.length === 0) {
@@ -225,6 +235,9 @@
     loadBarbers();
     timeSelect.innerHTML = '<option value="" disabled selected>Select a barber and date first…</option>';
     timeSelect.disabled = true;
+    // Reload services for the selected store and clear any previous selection
+    setSelectedService('', null);
+    loadServices(storeSelect.value || 'Nikaia');
   });
   barberSelect?.addEventListener('change', loadSlots);
   dateInput?.addEventListener('change', loadSlots);
@@ -284,7 +297,7 @@
 
   setMinDateToday();
   // Initialize selects with guidance text
-  timeSelect.innerHTML = '<option value="" disabled selected>Select a barber and date first…</option>';
+  timeSelect.innerHTML = '<option value="" disabled selected>Select a service, barber and date first…</option>';
   timeSelect.disabled = true;
   barberSelect.disabled = true;
   // Reset all form fields on page load/refresh
@@ -301,12 +314,12 @@
     if (dateInput) dateInput.value = '';
     if (timeSelect) {
       timeSelect.disabled = true;
-      timeSelect.innerHTML = '<option value="" disabled selected>Select a barber and date first…</option>';
+  timeSelect.innerHTML = '<option value="" disabled selected>Select a service, barber and date first…</option>';
     }
   }
   resetFormState();
   loadStores();
-  loadServices();
+  loadServices('Nikaia');
 
   // Ensure no preselected service (in case of browser autofill/back nav)
   if (serviceHidden) serviceHidden.value = '';

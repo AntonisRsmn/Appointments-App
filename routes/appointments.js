@@ -17,8 +17,8 @@ const STORES = {
   ]
 };
 
-// Config: Services catalog (shared across stores for now)
-const SERVICES = [
+// Config: Services catalog per store
+const SERVICES_BASE = [
   // Κούρεμα Αντρικό (6)
   { id: 'men-shaver-trimmer', category: 'Κούρεμα Αντρικό', name: 'Κούρεμα με shaver ή trimmer', durationMinutes: 30, price: 13 },
   { id: 'men-haircut', category: 'Κούρεμα Αντρικό', name: 'Κούρεμα Αντρικό', durationMinutes: 30, price: 12 },
@@ -46,32 +46,143 @@ const SERVICES = [
   { id: 'wax-nose-ears', category: 'Αποτρίχωση Με Κερί Και Κλωστή', name: 'Αποτρίχωση με κερί μύτη-αυτιά', durationMinutes: 30, price: 5 },
   { id: 'wax-face', category: 'Αποτρίχωση Με Κερί Και Κλωστή', name: 'Αποτρίχωση με Κερί Πρόσωπο', durationMinutes: 30, price: 5 },
 ];
-const OPEN_HOUR = 10; // 10:00
-const CLOSE_HOUR = 20; // 20:00 (last slot starts at 19:30)
-const SLOT_MINUTES = 30;
+
+// Aigaleo-specific overrides based on provided pricing
+const AIGALEO_OVERRIDES = {
+  'men-shaver-trimmer': { price: 15 },
+  'men-haircut': { price: 13 },
+  'buzz-cut': { price: 12 },
+  'senior-haircut': { price: 12 },
+  'haircut-plus-beard': { price: 17 },
+  'wash': { price: 3 },
+  'kids-haircut': { price: 11 },
+  // keep fade-refresh at 10 as per screenshot
+};
+
+function getServicesForStore(store = 'Nikaia') {
+  const list = SERVICES_BASE.map(s => ({ ...s }));
+  if (store === 'Aigaleo') {
+    // For Aigaleo, only show the "Κούρεμα Αντρικό" category with store-specific pricing
+    return list
+      .filter(s => s.category === 'Κούρεμα Αντρικό')
+      .map(s => ({ ...s, ...(AIGALEO_OVERRIDES[s.id] || {}) }));
+  }
+  return list;
+}
+// Store opening hours
+// - Weekly schedule allows per-day differences (0=Sun..6=Sat). Use null when closed.
+// - If a store doesn't define a weekly schedule for a day, fallback to STORE_DEFAULT_HOURS.
+const STORE_DEFAULT_HOURS = {
+  Nikaia: { open: '10:00', close: '20:00' },
+  Aigaleo: { open: '12:00', close: '21:00' }
+};
+const STORE_WEEKLY_HOURS = {
+  Nikaia: {
+    0: null, // Sunday: Closed
+    1: null, // Monday: Closed
+    2: { open: '10:00', close: '20:00' }, // Tuesday
+    3: { open: '10:00', close: '18:00' }, // Wednesday
+    4: { open: '10:00', close: '20:00' }, // Thursday
+    5: { open: '10:00', close: '20:00' }, // Friday
+    6: { open: '10:00', close: '18:00' }  // Saturday
+  },
+  Aigaleo: {
+    0: { open: '12:00', close: '18:00' }, // Sunday
+    1: null, // Monday: Closed
+    2: { open: '12:00', close: '21:00' }, // Tuesday
+    3: { open: '11:00', close: '19:00' }, // Wednesday
+    4: { open: '12:00', close: '21:00' }, // Thursday
+    5: { open: '12:00', close: '21:00' }, // Friday
+    6: { open: '10:00', close: '18:00' }  // Saturday
+  }
+};
+const BASE_STEP_MINUTES = 15; // smallest granularity
+
+function getStoreHoursForDate(store = 'Nikaia', dateStr) {
+  // dateStr: YYYY-MM-DD
+  try {
+    const d = new Date(`${dateStr}T00:00:00`);
+    const dow = d.getDay(); // 0=Sun..6=Sat
+    const weekly = STORE_WEEKLY_HOURS[store];
+    const cfg = weekly ? weekly[dow] : undefined;
+    if (cfg === null) return null; // closed
+    const base = cfg || STORE_DEFAULT_HOURS[store] || STORE_DEFAULT_HOURS.Nikaia;
+    return { openMins: toMinutes(base.open), closeMins: toMinutes(base.close) };
+  } catch (e) {
+    // Fallback: use default hours if date parsing fails
+    const base = STORE_DEFAULT_HOURS[store] || STORE_DEFAULT_HOURS.Nikaia;
+    return { openMins: toMinutes(base.open), closeMins: toMinutes(base.close) };
+  }
+}
 
 const useMemoryStore = !process.env.MONGO_URI;
 const memoryAppointments = [];
 let memoryIdCounter = 1;
 
-function generateSlots() {
-  const slots = [];
-  for (let h = OPEN_HOUR; h < CLOSE_HOUR; h++) {
-    for (let m = 0; m < 60; m += SLOT_MINUTES) {
-      const hh = `${h}`.padStart(2, '0');
-      const mm = `${m}`.padStart(2, '0');
-      slots.push(`${hh}:${mm}`);
-    }
-  }
-  return slots;
+function toMinutes(hhmm) {
+  const [hh, mm] = (hhmm || '').split(':').map(Number);
+  return (hh * 60) + (mm || 0);
 }
-
-function isValidSlot(time) {
-  return generateSlots().includes(time);
+function toHHMM(mins) {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+function overlaps(startA, durA, startB, durB) {
+  const a0 = toMinutes(startA);
+  const a1 = a0 + durA;
+  const b0 = toMinutes(startB);
+  const b1 = b0 + durB;
+  return a0 < b1 && b0 < a1;
+}
+function generateCandidateStarts(durationMinutes, store = 'Nikaia', date) {
+  const step = (durationMinutes % 30 === 0) ? 30 : BASE_STEP_MINUTES; // 30m services on :00/:30, otherwise 15m grid
+  const hours = getStoreHoursForDate(store, date);
+  if (!hours) return [];
+  const { openMins: open, closeMins: close } = hours;
+  const latestStart = close - durationMinutes;
+  const out = [];
+  for (let t = open; t <= latestStart; t += step) {
+    out.push(toHHMM(t));
+  }
+  return out;
+}
+function isValidSlot(time, store = 'Nikaia', date) {
+  if (!/^\d{2}:\d{2}$/.test(time)) return false;
+  const m = toMinutes(time);
+  const mins = m % 60;
+  if (![0, 15, 30, 45].includes(mins)) return false;
+  const hours = getStoreHoursForDate(store, date);
+  if (!hours) return false; // closed day
+  const { openMins, closeMins } = hours;
+  return m >= openMins && m < closeMins;
 }
 
 function getBarbersForStore(store = 'Nikaia') {
   return STORES[store] || [];
+}
+
+function getServiceByName(store, serviceName) {
+  const list = getServicesForStore(store);
+  return list.find(s => s.name === serviceName);
+}
+
+async function getAppointmentsForDate(date, store = 'Nikaia', barbers = null) {
+  if (useMemoryStore) {
+    let items = memoryAppointments.filter(a => a.date === date && (a.store || 'Nikaia') === store);
+    if (barbers && Array.isArray(barbers)) items = items.filter(a => barbers.includes(a.barber));
+    return items;
+  }
+  const base = { date };
+  if (store === 'Nikaia') {
+    Object.assign(base, { $or: [{ store: 'Nikaia' }, { store: { $exists: false } }] });
+  } else {
+    base.store = store;
+  }
+  if (barbers && Array.isArray(barbers) && barbers.length) {
+    base.barber = { $in: barbers };
+  }
+  return Appointment.find(base).lean();
 }
 
 function validatePayload({ name, email, phone, date, time, service, barber, store = 'Nikaia' }) {
@@ -85,7 +196,7 @@ function validatePayload({ name, email, phone, date, time, service, barber, stor
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return 'Invalid date format';
   }
-  if (!/^\d{2}:\d{2}$/.test(time) || !isValidSlot(time)) {
+  if (!/^\d{2}:\d{2}$/.test(time) || !isValidSlot(time, store, date)) {
     return 'Invalid time slot';
   }
   return null;
@@ -103,18 +214,30 @@ async function getAppointmentsByDateBarber(date, barber, store = 'Nikaia') {
   return Appointment.find({ ...match, store }).lean();
 }
 
-async function isSlotAvailable(date, time, barber, store = 'Nikaia') {
+async function isSlotAvailable(date, time, barber, store = 'Nikaia', durationMinutes = 30) {
+  // Fetch all appointments for this date+barber in this store and check interval overlap
   if (useMemoryStore) {
-    return !memoryAppointments.some(a => a.date === date && a.time === time && a.barber === barber && (a.store || 'Nikaia') === store);
+    const items = memoryAppointments.filter(a => a.date === date && a.barber === barber && (a.store || 'Nikaia') === store);
+    return !items.some(a => {
+      const apptStore = a.store || 'Nikaia';
+      const svc = getServiceByName(apptStore, a.service);
+      const dur = (svc && svc.durationMinutes) || 30;
+      return overlaps(time, durationMinutes, a.time, dur);
+    });
   }
-  const query = { date, time, barber };
+  const query = { date, barber };
   if (store === 'Nikaia') {
     Object.assign(query, { $or: [{ store: 'Nikaia' }, { store: { $exists: false } }] });
   } else {
     query.store = store;
   }
-  const existing = await Appointment.findOne(query).lean();
-  return !existing;
+  const existingList = await Appointment.find(query).lean();
+  return !existingList.some(a => {
+    const apptStore = a.store || 'Nikaia';
+    const svc = getServiceByName(apptStore, a.service);
+    const dur = (svc && svc.durationMinutes) || 30;
+    return overlaps(time, durationMinutes, a.time, dur);
+  });
 }
 
 // GET stores
@@ -124,7 +247,9 @@ router.get('/stores', (req, res) => {
 
 // GET services catalog grouped by category
 router.get('/services', (req, res) => {
-  const byCat = SERVICES.reduce((acc, s) => {
+  const store = req.query.store || 'Nikaia';
+  const catalog = getServicesForStore(store);
+  const byCat = catalog.reduce((acc, s) => {
     acc[s.category] = acc[s.category] || [];
     acc[s.category].push({ id: s.id, name: s.name, durationMinutes: s.durationMinutes, price: s.price });
     return acc;
@@ -144,6 +269,7 @@ router.get('/slots', async (req, res) => {
     const { date } = req.query;
     const store = req.query.store || 'Nikaia';
     const barber = req.query.barber;
+    const durationParam = parseInt(req.query.duration, 10);
     if (!date || !barber) {
       return res.status(400).json({ error: 'date and barber are required' });
     }
@@ -153,21 +279,70 @@ router.get('/slots', async (req, res) => {
       return res.status(400).json({ error: 'Invalid barber' });
     }
 
-    const allSlots = generateSlots();
+    const duration = Number.isFinite(durationParam) && durationParam > 0 ? durationParam : 30;
+    const candidates = generateCandidateStarts(duration, store, date);
+    if (!candidates.length) {
+      // store closed on this date
+      return res.json([]);
+    }
+
+    // Fetch all appointments for that date/store and relevant barbers in ONE query
+    const targetBarbers = isAny ? validBarbers : [barber];
+    const appts = await getAppointmentsForDate(date, store, targetBarbers);
+    const byBarber = new Map();
+    targetBarbers.forEach(b => byBarber.set(b, []));
+    for (const a of appts) {
+      if (!byBarber.has(a.barber)) byBarber.set(a.barber, []);
+      byBarber.get(a.barber).push(a);
+    }
+
+    // Helper to test a single barber's availability using in-memory overlaps
+    const isFreeForBarber = (b, t) => {
+      const list = byBarber.get(b) || [];
+      for (const a of list) {
+        const apptStore = a.store || 'Nikaia';
+        const svc = getServiceByName(apptStore, a.service);
+        const dur = (svc && svc.durationMinutes) || 30;
+        if (overlaps(t, duration, a.time, dur)) return false;
+      }
+      return true;
+    };
+
     if (isAny) {
-      // Return slots where at least one barber is free
-      const lists = await Promise.all(validBarbers.map(b => getAppointmentsByDateBarber(date, b, store)));
-      const bookedSets = lists.map(list => new Set(list.map(a => a.time)));
-      const available = allSlots.filter(s => bookedSets.some(set => !set.has(s)));
-      return res.json(available);
+      const results = candidates.filter(t => targetBarbers.some(b => isFreeForBarber(b, t)));
+      return res.json(results);
     } else {
-      const appts = await getAppointmentsByDateBarber(date, barber, store);
-      const booked = new Set(appts.map(a => a.time));
-      const available = allSlots.filter(s => !booked.has(s));
-      return res.json(available);
+      const results = candidates.filter(t => isFreeForBarber(barber, t));
+      return res.json(results);
     }
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch slots' });
+  }
+});
+
+// Fetch single appointment for faster edit modal load
+router.get('/item/:id', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (useMemoryStore) {
+      const appt = memoryAppointments.find(a => String(a._id) === String(id));
+      if (!appt) return res.status(404).json({ error: 'Not found' });
+      const sessionStore = req.session && req.session.adminStore;
+      if (sessionStore && sessionStore !== 'ALL' && (appt.store || 'Nikaia') !== sessionStore) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+      return res.json(appt);
+    }
+    const appt = await Appointment.findById(id).lean();
+    if (!appt) return res.status(404).json({ error: 'Not found' });
+    const sessionStore = req.session && req.session.adminStore;
+    if (sessionStore && sessionStore !== 'ALL' && appt && appt.store !== sessionStore && !(sessionStore === 'Nikaia' && !appt.store)) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    res.json(appt);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch appointment' });
   }
 });
 
@@ -178,13 +353,22 @@ router.post('/book', async (req, res) => {
     if (!payload.store) payload.store = 'Nikaia';
     let { name, email, phone, date, time, service, barber, store } = payload;
 
-    // If barber is ANY/Anyone, pick an available barber for this slot
+    // Resolve duration for service
+    const svc = getServiceByName(store, service);
+    const durationMinutes = (svc && svc.durationMinutes) || 30;
+    // Enforce store hours (start within hours and finish before close)
+    const hours = getStoreHoursForDate(store, date);
+    if (!hours || !isValidSlot(time, store, date) || (toMinutes(time) + durationMinutes > hours.closeMins)) {
+      return res.status(400).send('Invalid time slot');
+    }
+
+    // If barber is ANY/Anyone, pick a barber who is free for the full duration
     if (barber === 'ANY' || barber === 'Anyone') {
       const candidates = getBarbersForStore(store);
       let chosen = null;
       for (const b of candidates) {
         // eslint-disable-next-line no-await-in-loop
-        const free = await isSlotAvailable(date, time, b, store);
+        const free = await isSlotAvailable(date, time, b, store, durationMinutes);
         if (free) { chosen = b; break; }
       }
       if (!chosen) {
@@ -197,7 +381,7 @@ router.post('/book', async (req, res) => {
     const error = validatePayload({ name, email, phone, date, time, service, barber, store });
     if (error) return res.status(400).send(error);
 
-    const available = await isSlotAvailable(date, time, barber, store);
+    const available = await isSlotAvailable(date, time, barber, store, durationMinutes);
     if (!available) {
       return res.status(409).send('Selected time is no longer available');
     }
@@ -316,12 +500,20 @@ router.patch('/:id/status', requireAdmin, async (req, res) => {
 router.put('/:id', requireAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, email, phone, date, time, service, barber, store = 'Nikaia', status } = req.body || {};
+  const { name, email, phone, date, time, service, barber, store = 'Nikaia', status } = req.body || {};
 
     // Validate basic fields if provided
     const payload = { name, email, phone, date, time, service, barber, store };
     const errMsg = validatePayload(payload);
     if (errMsg) return res.status(400).json({ error: errMsg });
+
+    // Enforce store hours for the selected service duration
+    const svc = getServiceByName(store, service);
+    const durationMinutes = (svc && svc.durationMinutes) || 30;
+    const hours = getStoreHoursForDate(store, date);
+    if (!hours || !isValidSlot(time, store, date) || (toMinutes(time) + durationMinutes > hours.closeMins)) {
+      return res.status(400).json({ error: 'Invalid time slot' });
+    }
 
     // Check slot availability excluding current appointment
     if (useMemoryStore) {

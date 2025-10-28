@@ -91,10 +91,10 @@ app.get('/admin/login', (req, res) => {
 });
 
 app.get('/admin/nikaia/login', (req, res) => {
-  res.render('login', { error: null, loginAction: '/admin/nikaia/login', storeLabel: 'Olympou 11, Nikea 184 54' });
+  res.render('login', { error: null, loginAction: '/admin/nikaia/login', storeLabel: 'Ολύμπου 11, Νίκαια' });
 });
 app.get('/admin/aigaleo/login', (req, res) => {
-  res.render('login', { error: null, loginAction: '/admin/aigaleo/login', storeLabel: 'Mark. Mpotsari 9, Egaleo 122 41' });
+  res.render('login', { error: null, loginAction: '/admin/aigaleo/login', storeLabel: 'Μαρκ. Μπότσαρη 9, Αιγάλεω' });
 });
 
 // Unified login: decide destination store by password
@@ -163,10 +163,10 @@ app.get('/admin/logout', (req, res) => {
 
 // Admin pages per store
 app.get('/admin/nikaia', requireAdminForStore('Nikaia'), (req, res) => {
-  res.render('admin', { lockedStore: 'Nikaia', lockedStoreLabel: 'Olympou 11, Nikea 184 54' });
+  res.render('admin', { lockedStore: 'Nikaia', lockedStoreLabel: 'Ολύμπου 11, Νίκαια' });
 });
 app.get('/admin/aigaleo', requireAdminForStore('Aigaleo'), (req, res) => {
-  res.render('admin', { lockedStore: 'Aigaleo', lockedStoreLabel: 'Mark. Mpotsari 9, Egaleo 122 41' });
+  res.render('admin', { lockedStore: 'Aigaleo', lockedStoreLabel: 'Μαρκ. Μπότσαρη 9, Αιγάλεω' });
 });
 // Aggregated admin page (all stores)
 app.get('/admin/all', requireAdminAll, (req, res) => {

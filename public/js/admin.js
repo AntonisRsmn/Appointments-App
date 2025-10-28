@@ -1,7 +1,7 @@
 (() => {
   const STORE_LABELS = {
-    'Nikaia': 'Olympou 11, Nikea 184 54',
-    'Aigaleo': 'Mark. Mpotsari 9, Egaleo 122 41'
+    'Nikaia': 'Ολύμπου 11, Νίκαια',
+    'Aigaleo': 'Μαρκ. Μπότσαρη 9, Αιγάλεω'
   };
   const table = document.getElementById('appointmentsTable');
   const tbody = table.querySelector('tbody');
@@ -191,11 +191,12 @@
     const date = editDate.value;
     const barber = editBarber.value;
     const store = (editStore && editStore.value) || 'Nikaia';
+    const dur = Number(editService?.selectedOptions?.[0]?.dataset?.duration || '30');
     editTime.disabled = true;
     editTime.innerHTML = TIME_PLACEHOLDER;
     if (!date || !barber) return;
     try {
-      const params = new URLSearchParams({ date, barber, store }).toString();
+      const params = new URLSearchParams({ date, barber, store, duration: String(dur) }).toString();
       const res = await fetch(`/appointments/slots?${params}`);
       const slots = await res.json();
       editTime.innerHTML = TIME_PLACEHOLDER +
@@ -207,19 +208,34 @@
   }
 
   async function openEditModal(id) {
-    // Load current item from last fetched list by refetching a filtered all
+    // Load only the needed appointment to improve performance
     try {
-      const res = await fetch('/appointments/all');
-      const items = await res.json();
-      const a = items.find(x => String(x._id) === String(id));
+  const res = await fetch(`/appointments/item/${id}`);
+      if (!res.ok) throw new Error(await res.text());
+      const a = await res.json();
       if (!a) return alert('Appointment not found');
       // Populate fields
       editId.value = a._id;
       editName.value = a.name || '';
       editEmail.value = a.email || '';
       editPhone.value = a.phone || '';
-      // Load services into the select and set the current value
-      await loadServiceOptions();
+      // Load services, stores and barbers in parallel
+      await Promise.all([
+        loadServiceOptions(a.store || 'Nikaia'),
+        (async () => {
+          try {
+            const resStores = await fetch('/appointments/stores');
+            const stores = await resStores.json();
+            if (editStore) editStore.innerHTML = stores.map(s => `<option value="${s}">${STORE_LABELS[s] || s}</option>`).join('');
+          } catch {}
+        })(),
+        (async () => {
+          const resB = await fetch('/appointments/barbers?' + new URLSearchParams({ store: (a.store || 'Nikaia') }));
+          const barbers = await resB.json();
+          // In edit mode, force specific barber (no ANY)
+          editBarber.innerHTML = barbers.map(b => `<option value="${b}">${b}</option>`).join('');
+        })()
+      ]);
       // If the service isn't found in options (legacy), add it
       if (a.service) {
         const optFound = [...editService.options].some(o => o.value === a.service);
@@ -234,17 +250,8 @@
         editService.value = '';
       }
       // Fill stores
-      try {
-        const resStores = await fetch('/appointments/stores');
-        const stores = await resStores.json();
-        if (editStore) editStore.innerHTML = stores.map(s => `<option value="${s}">${STORE_LABELS[s] || s}</option>`).join('');
-      } catch {}
       if (editStore) editStore.value = a.store || 'Nikaia';
-      // Fill barbers for selected store
-      const resB = await fetch('/appointments/barbers?' + new URLSearchParams({ store: (editStore && editStore.value) || 'Nikaia' }));
-      const barbers = await resB.json();
-      // In edit mode, force choosing a specific barber to avoid validation errors
-      editBarber.innerHTML = barbers.map(b => `<option value="${b}">${b}</option>`).join('');
+      // Services select value was set after loadServiceOptions
       editBarber.value = a.barber || '';
       editDate.value = a.date || '';
       // Load slots for the current barber and date
@@ -277,7 +284,7 @@
     editName.value = '';
     editEmail.value = '';
     editPhone.value = '';
-  await loadServiceOptions();
+  await loadServiceOptions((editStore && editStore.value) || 'Nikaia');
   editService.value = '';
     editDate.value = '';
     editTime.innerHTML = TIME_PLACEHOLDER;
@@ -336,9 +343,13 @@
     try {
       const resB = await fetch('/appointments/barbers?' + new URLSearchParams({ store: (editStore && editStore.value) || 'Nikaia' }));
       const barbers = await resB.json();
-      editBarber.innerHTML = `<option value="ANY">Οποιοσδήποτε Υπάλληλος</option>` +
+      // In edit mode (existing id), do not include the ANY option, as backend requires a specific barber.
+      const isEditing = !!(editId && editId.value);
+      editBarber.innerHTML = (isEditing ? '' : `<option value="ANY">Οποιοσδήποτε Υπάλληλος</option>`) +
         barbers.map(b => `<option value="${b}">${b}</option>`).join('');
     } catch {}
+    // Reload services for the selected store
+    try { await loadServiceOptions((editStore && editStore.value) || 'Nikaia'); } catch {}
     await loadEditSlots();
   });
   editBarber?.addEventListener('change', loadEditSlots);
@@ -389,9 +400,10 @@
   btnCreate?.addEventListener('click', openCreateModal);
 
   // Load services into the Service select (with categories)
-  async function loadServiceOptions() {
+  async function loadServiceOptions(store) {
     try {
-      const res = await fetch('/appointments/services');
+      const params = store ? ('?' + new URLSearchParams({ store })) : '';
+      const res = await fetch('/appointments/services' + params);
       const byCat = await res.json();
       const cats = Object.keys(byCat);
       editService.innerHTML = '<option value="" disabled selected>Choose a service…</option>';
@@ -404,12 +416,16 @@
           const dur = svc.durationMinutes;
           const durLabel = dur >= 60 ? `${Math.floor(dur/60)}h${dur%60?` ${dur%60}m`:''}` : `${dur}m`;
           opt.textContent = `${svc.name} • €${svc.price} • ${durLabel}`;
+          opt.dataset.duration = String(dur);
           og.appendChild(opt);
         });
         editService.appendChild(og);
       });
     } catch {}
   }
+
+  // Refresh slots when service changes to align time grid with duration
+  editService?.addEventListener('change', loadEditSlots);
 
   loadStores().then(loadBarbers).then(loadAppointments);
 })();
