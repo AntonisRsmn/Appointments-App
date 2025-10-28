@@ -240,6 +240,7 @@
     }
 
     setMessage('Κλείνουμε το ραντεβού σας…', 'info');
+    if (submitBtn) submitBtn.disabled = true;
     try {
       const res = await fetch('/appointments/book', {
         method: 'POST',
@@ -248,7 +249,22 @@
       });
       const text = await res.text();
       if (!res.ok) {
-        setMessage(text || 'Booking failed', 'error');
+        // Handle common cases with clearer guidance
+        if (res.status === 409) {
+          if ((data.barber === 'ANY') || (data.barber === 'Anyone')) {
+            setMessage(text || 'No available barber at that time. Please pick another time or choose a specific barber.', 'error');
+          } else {
+            setMessage(text || 'Selected time is no longer available for that barber. Please choose another time.', 'error');
+          }
+          // Refresh slots to reflect up-to-date availability
+          await loadSlots();
+        } else if (res.status === 400) {
+          setMessage(text || 'Please check your details and try again.', 'error');
+        } else if (res.status === 500) {
+          setMessage(text || 'Server error during booking. Please try again.', 'error');
+        } else {
+          setMessage(text || 'Booking failed', 'error');
+        }
         return;
       }
       setMessage(text, 'success');
@@ -261,6 +277,8 @@
       barberSelect.innerHTML = '<option value="" disabled selected>Choose a barber…</option>';
     } catch (e) {
       setMessage('Σφάλμα δικτύου κατά την κράτηση.', 'error');
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
     }
   });
 

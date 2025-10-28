@@ -11,6 +11,7 @@
   const btnRefresh = document.getElementById('btnRefresh');
   const btnClear = document.getElementById('btnClear');
   const btnCreate = document.getElementById('btnCreate');
+  const adminMsg = document.getElementById('adminMsg');
 
   const y = document.getElementById('year');
   if (y) y.textContent = new Date().getFullYear();
@@ -20,6 +21,30 @@
     const d = new Date(iso);
     if (isNaN(d)) return '';
     return d.toLocaleString();
+  }
+
+  function setAdminMsg(text, type = 'info', timeoutMs = 4000) {
+    if (!adminMsg) return;
+    adminMsg.textContent = text || '';
+    adminMsg.className = `msg ${type}`;
+    if (text && timeoutMs) {
+      clearTimeout(setAdminMsg._t);
+      setAdminMsg._t = setTimeout(() => { if (adminMsg.textContent === text) setAdminMsg(''); }, timeoutMs);
+    }
+  }
+
+  async function extractError(res) {
+    let message = '';
+    try {
+      const ct = res.headers.get('content-type') || '';
+      if (ct.includes('application/json')) {
+        const j = await res.json();
+        message = j && (j.error || j.message) || '';
+      } else {
+        message = await res.text();
+      }
+    } catch {}
+    return message || `Error ${res.status}`;
   }
 
   function renderRows(items) {
@@ -122,10 +147,15 @@
       btn.disabled = true;
       try {
         const res = await fetch(`/appointments/${id}/status`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: newStatus }) });
-        if (!res.ok) throw new Error(await res.text());
+        if (!res.ok) {
+          const msg = await extractError(res);
+          setAdminMsg(msg || 'Failed to update status', 'error');
+          return;
+        }
         await loadAppointments();
+        setAdminMsg('Status updated', 'success');
       } catch (err) {
-        alert('Failed to update status');
+        setAdminMsg('Network error while updating status', 'error');
       } finally {
         btn.disabled = false;
       }
@@ -213,8 +243,8 @@
       // Fill barbers for selected store
       const resB = await fetch('/appointments/barbers?' + new URLSearchParams({ store: (editStore && editStore.value) || 'Nikaia' }));
       const barbers = await resB.json();
-      editBarber.innerHTML = `<option value="ANY">Οποιοσδήποτε Υπάλληλος</option>` +
-        barbers.map(b => `<option value="${b}">${b}</option>`).join('');
+      // In edit mode, force choosing a specific barber to avoid validation errors
+      editBarber.innerHTML = barbers.map(b => `<option value="${b}">${b}</option>`).join('');
       editBarber.value = a.barber || '';
       editDate.value = a.date || '';
       // Load slots for the current barber and date
@@ -236,7 +266,7 @@
   if (editDelete) editDelete.style.display = '';
   showModal();
     } catch (e) {
-      alert('Failed to open editor');
+      setAdminMsg('Failed to open editor', 'error');
     }
   }
 
@@ -290,12 +320,13 @@
     try {
       const res = await fetch(`/appointments/${id}`, { method: 'DELETE' });
       if (!res.ok) {
-        const txt = await res.text();
-        setEditMsg(txt || 'Failed to delete', 'error');
+        const msg = await extractError(res);
+        setEditMsg(msg || 'Failed to delete', 'error');
         return;
       }
       hideModal();
       await loadAppointments();
+      setAdminMsg('Appointment deleted', 'success');
     } catch (err) {
       setEditMsg('Network error', 'error');
     }
@@ -338,11 +369,18 @@
         text = await res.text();
       }
       if (!res.ok) {
-        setEditMsg(text || 'Failed to save', 'error');
+        // Map common errors to friendlier messages
+        let friendly = text || 'Failed to save';
+        if (res.status === 400) friendly = text || 'Please check all fields and try again.';
+        if (res.status === 403) friendly = text || 'Forbidden. You may not have permission for this action.';
+        if (res.status === 404) friendly = text || 'Appointment not found.';
+        if (res.status === 409) friendly = text || 'Selected time is no longer available.';
+        setEditMsg(friendly, 'error');
         return;
       }
       hideModal();
       await loadAppointments();
+      setAdminMsg('Appointment saved', 'success');
     } catch (err) {
       setEditMsg('Network error', 'error');
     }
