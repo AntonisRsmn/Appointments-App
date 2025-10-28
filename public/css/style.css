@@ -34,9 +34,10 @@ h1, h2, h3 { line-height: 1.2; margin: 0 0 8px; font-weight: 700; }
 
 .hero { padding: 64px 0 48px; position: relative; }
 .hero::before { content:""; position:absolute; inset:0; background: radial-gradient(1100px 300px at 80% -50%, rgba(14,165,233,0.08), transparent 60%), radial-gradient(900px 300px at -10% 20%, rgba(245,158,11,0.08), transparent 60%); pointer-events:none; }
-.hero-inner { display: grid; grid-template-columns: 1fr 1fr; gap: 36px; align-items: start; }
-.hero-copy .title { font-size: clamp(32px, 5vw, 56px); margin-bottom: 12px; letter-spacing: -0.5px; }
-.subtitle { color: var(--muted); margin: 0 0 16px; }
+.hero-inner { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
+.hero-copy { display: flex; flex-direction: column; gap: 14px; }
+.hero-copy .title { font-size: clamp(32px, 5vw, 56px); margin: 0; letter-spacing: -0.5px; }
+.subtitle { color: var(--muted); margin: 0; }
 
 .hero-card { border: 1px solid var(--border); background: var(--surface); border-radius: 16px; padding: 20px; box-shadow: 0 8px 30px rgba(0,0,0,0.08); }
 .card { border: 1px solid var(--border); border-radius: 16px; background: #fff; padding: 20px; box-shadow: 0 8px 30px rgba(0,0,0,0.06); }
@@ -72,7 +73,7 @@ input:focus, select:focus { border-color: #cbd5e1; box-shadow: 0 0 0 3px rgba(59
 .footer .wrap { padding: 18px 16px; color: var(--muted); text-align: center; }
 
 /* Informational chips under hero */
-.badges { display:flex; gap:12px; flex-wrap:wrap; margin: 12px 0 0; }
+.badges { display:flex; gap:12px; flex-wrap:wrap; margin: 6px 0 0; }
 .badge-chip { display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border:1px solid var(--border); border-radius:999px; background:#fff; color: var(--text); font-weight:600; }
 .badge-chip .dot { width:8px; height:8px; border-radius:50%; background: #f59e0b; }
 
