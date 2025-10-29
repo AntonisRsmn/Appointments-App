@@ -158,8 +158,8 @@
         btn.textContent = 'Επιλεγμένο';
         btn.closest('.service-item')?.classList.add('selected');
 
-        setSelectedService(btn.dataset.name, info);
-        document.getElementById('appointmentForm')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  setSelectedService(btn.dataset.name, info);
+  // Do not auto-scroll the page when a service is selected; keep user position stable
       });
     } catch (e) {
       servicesPicker.textContent = 'Could not load services.';

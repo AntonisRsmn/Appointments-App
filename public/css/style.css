@@ -110,8 +110,9 @@ input[type="date"]::-webkit-date-and-time-value,
 input[type="time"]::-webkit-date-and-time-value { text-align: left; }
 
 .actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
-.btn { appearance: none; border: 1px solid var(--accent); background: var(--accent); color: #0b0f14; padding: 12px 16px; border-radius: 12px; font-weight: 700; cursor: pointer; transition: transform 120ms ease, opacity .2s ease; box-shadow: 0 6px 14px rgba(212,175,55,0.25); }
-.btn:hover { opacity: 0.95; }
+.btn { appearance: none; border: 1px solid var(--accent); background: var(--accent); color: #0b0f14; padding: 12px 16px; border-radius: 12px; font-weight: 700; cursor: pointer; transition: transform 120ms ease, opacity .2s ease; box-shadow: 0 6px 14px rgba(212,175,55,0.25); text-decoration: none; }
+.btn:hover { opacity: 0.95; text-decoration: none; }
+.btn:visited { text-decoration: none; }
 .btn:active { transform: translateY(1px); }
 .btn:focus-visible { outline: none; box-shadow: var(--focus); }
 .btn.btn-ghost { background: transparent; color: var(--text); border-color: var(--border); box-shadow: none; }
