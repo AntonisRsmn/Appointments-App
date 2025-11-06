@@ -2,9 +2,12 @@
   const form = document.getElementById('appointmentForm');
   const msgEl = document.getElementById('formMessage');
   const serviceHidden = document.getElementById('serviceHidden');
-  let selectedServiceInfo = null; // { durationMinutes, price }
+  // Track multiple selected services
+  let selectedServices = []; // [{ name, durationMinutes, price }]
   const servicesPicker = document.getElementById('servicesPicker');
   const selectedServiceNote = document.getElementById('selectedServiceNote');
+  const storePicker = document.getElementById('storePicker');
+  const storeHint = document.getElementById('storeHint');
   const storeSelect = document.getElementById('storeSelect');
   const barberSelect = document.getElementById('barberSelect');
   const dateInput = document.getElementById('dateInput');
@@ -34,25 +37,24 @@
     dateInput.min = `${yyyy}-${mm}-${dd}`;
   }
 
-  function setSelectedService(name, info) {
+  function updateSelectedServices(nextList) {
+    selectedServices = nextList || [];
     if (!serviceHidden) return;
-    serviceHidden.value = name || '';
+    // Store comma-separated names for backend; keep underlying API unchanged
+    serviceHidden.value = selectedServices.map(s => s.name).join(', ');
     if (selectedServiceNote) {
-      if (name) {
-        selectedServiceNote.textContent = `${name} • ${info?.durationMinutes || 30} λεπτά • € ${info?.price ?? ''}`;
+      if (selectedServices.length) {
+        const totalMin = selectedServices.reduce((sum, s) => sum + (Number(s.durationMinutes) || 0), 0);
+        const totalPrice = selectedServices.reduce((sum, s) => sum + (Number(s.price) || 0), 0);
+        const names = selectedServices.map(s => s.name).join(' + ');
+        selectedServiceNote.textContent = `${names} • ${totalMin} λεπτά • € ${totalPrice}`;
         selectedServiceNote.className = 'msg';
+        clearMessage();
       } else {
         selectedServiceNote.textContent = '';
       }
     }
-    selectedServiceInfo = info || null;
-    // Clear any previous error near the Book button when a selection is made
-    if (name) clearMessage();
-    // If clearing the selection, also remove any visual selection in the services list
-    if (!name) {
-      clearServiceSelectionVisuals();
-    }
-    // If user already picked store/barber/date, refresh slots to reflect selected service duration
+    // Refresh slots to reflect new total duration
     if (storeSelect.value && barberSelect.value && dateInput.value) {
       loadSlots();
     }
@@ -73,7 +75,11 @@
     if (!servicesPicker) return;
     try {
       const params = new URLSearchParams();
-      const store = storeOverride || storeSelect?.value || 'Nikaia';
+      const store = storeOverride || storeSelect?.value;
+      if (!store) {
+        servicesPicker.textContent = 'Please choose a store first.';
+        return;
+      }
       if (store) params.set('store', store);
       const res = await fetch('/appointments/services' + (params.toString() ? ('?' + params.toString()) : ''));
       const byCat = await res.json();
@@ -107,12 +113,11 @@
           `;
           listWrap.appendChild(row);
         });
-
-        // If we already have a selected service, reflect it in the UI
-        const current = serviceHidden?.value;
-        if (current) {
+        // Reflect any current multi-selection in the UI
+        const selectedNames = new Set(selectedServices.map(s => s.name));
+        if (selectedNames.size) {
           [...listWrap.querySelectorAll('button[data-name]')].forEach(btn => {
-            if (btn.dataset.name === current) {
+            if (selectedNames.has(btn.dataset.name)) {
               btn.classList.add('selected');
               btn.textContent = 'Επιλεγμένο';
               btn.closest('.service-item')?.classList.add('selected');
@@ -138,28 +143,22 @@
       listWrap.addEventListener('click', (e) => {
         const btn = e.target.closest('button[data-name]');
         if (!btn) return;
-        const info = { durationMinutes: Number(btn.dataset.duration), price: Number(btn.dataset.price) };
-        // Determine if clicking the already-selected service (toggle off)
-        const prevBtn = listWrap.querySelector('button[data-name].selected');
-        const alreadySelected = prevBtn && prevBtn === btn;
-        // Clear previous selection styling
-        const prevRow = listWrap.querySelector('.service-item.selected');
-        prevRow?.classList.remove('selected');
-        if (prevBtn) { prevBtn.classList.remove('selected'); prevBtn.textContent = 'Επιλογή'; }
-
-        if (alreadySelected) {
-          // Toggle off: clear selection
-          setSelectedService('', null);
+        const info = { name: btn.dataset.name, durationMinutes: Number(btn.dataset.duration), price: Number(btn.dataset.price) };
+        const isSelected = btn.classList.contains('selected');
+        if (isSelected) {
+          // Remove from selection
+          btn.classList.remove('selected');
+          btn.textContent = 'Επιλογή';
+          btn.closest('.service-item')?.classList.remove('selected');
+          updateSelectedServices(selectedServices.filter(s => s.name !== info.name));
           return;
         }
-
-        // Apply new selection styling
+        // Add to selection
         btn.classList.add('selected');
         btn.textContent = 'Επιλεγμένο';
         btn.closest('.service-item')?.classList.add('selected');
-
-  setSelectedService(btn.dataset.name, info);
-  // Do not auto-scroll the page when a service is selected; keep user position stable
+        updateSelectedServices([...selectedServices, info]);
+        // Do not auto-scroll the page when a service is selected
       });
     } catch (e) {
       servicesPicker.textContent = 'Could not load services.';
@@ -167,18 +166,15 @@
   }
 
   async function loadStores() {
+    // Only populate options if the element is a visible <select>
+    if (!storeSelect || storeSelect.tagName !== 'SELECT') return;
     try {
       const res = await fetch('/appointments/stores');
       const stores = await res.json();
-      const STORE_LABELS = {
-        'Nikaia': 'Ολύμπου 11, Νίκαια',
-        'Aigaleo': 'Μαρκ. Μπότσαρη 9, Αιγάλεω'
-      };
+      const STORE_LABELS = { 'Nikaia': 'Store 1', 'Aigaleo': 'Store 2' };
       storeSelect.innerHTML = '<option value="" disabled selected>Choose a store…</option>' +
         stores.map(s => `<option value="${s}">${STORE_LABELS[s] || s}</option>`).join('');
-    } catch (e) {
-      setMessage('Failed to load stores.', 'error');
-    }
+    } catch (e) { setMessage('Failed to load stores.', 'error'); }
   }
 
   async function loadBarbers() {
@@ -187,9 +183,10 @@
       const res = await fetch('/appointments/barbers?' + new URLSearchParams({ store }));
       const barbers = await res.json();
       const anyoneOption = `<option value=\"ANY\">Οποιοσδήποτε Υπάλληλος</option>`;
+      // Display enumerated barber labels (Barber 1, Barber 2, ...), keep original values for backend queries
       barberSelect.innerHTML = '<option value=\"\" disabled>Choose a barber…</option>' +
         anyoneOption +
-        barbers.map(b => `<option value=\"${b}\">${b}</option>`).join('');
+        barbers.map((b, i) => `<option value=\"${b}\">Barber ${i + 1}</option>`).join('');
       barberSelect.disabled = false;
       // Default to Οποιοσδήποτε Υπάλληλος
       barberSelect.value = 'ANY';
@@ -202,10 +199,11 @@
     const date = dateInput.value;
     const barber = barberSelect.value;
     const store = storeSelect.value || 'Nikaia';
-    const duration = selectedServiceInfo?.durationMinutes || null;
+    // If no service selected yet, use a sensible default (30m) so users can pick a time earlier
+    const duration = selectedServices.length ? selectedServices.reduce((sum, s) => sum + (Number(s.durationMinutes)||0), 0) : 30;
     // Guard when store/barber/date are not selected
-    if (!store || !barber || !date || !duration) {
-      timeSelect.innerHTML = '<option value="" disabled selected>Select a service, barber and date first…</option>';
+    if (!store || !barber || !date) {
+      timeSelect.innerHTML = '<option value="" disabled selected>Select a barber and date first…</option>';
       timeSelect.disabled = true;
       return;
     }
@@ -229,24 +227,30 @@
     }
   }
 
-  storeSelect?.addEventListener('change', () => {
-    barberSelect.disabled = true;
-    barberSelect.innerHTML = '<option value="" disabled selected>Choose a barber…</option>';
-    loadBarbers();
-    timeSelect.innerHTML = '<option value="" disabled selected>Select a barber and date first…</option>';
-    timeSelect.disabled = true;
-    // Reload services for the selected store and clear any previous selection
-    setSelectedService('', null);
-    loadServices(storeSelect.value || 'Nikaia');
-  });
+  if (storeSelect && storeSelect.tagName === 'SELECT') {
+    storeSelect.addEventListener('change', () => {
+      barberSelect.disabled = true;
+      barberSelect.innerHTML = '<option value="" disabled selected>Choose a barber…</option>';
+      loadBarbers();
+      timeSelect.innerHTML = '<option value="" disabled selected>Select a barber and date first…</option>';
+      timeSelect.disabled = true;
+      updateSelectedServices([]);
+      loadServices(storeSelect.value);
+    });
+  }
   barberSelect?.addEventListener('change', loadSlots);
   dateInput?.addEventListener('change', loadSlots);
 
   form?.addEventListener('submit', async (e) => {
     e.preventDefault();
     const data = Object.fromEntries(new FormData(form));
+    if (!storeSelect?.value) {
+      setMessage('Choose a store to continue', 'error');
+      document.getElementById('choose-store')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
     if (!data.service) {
-      setMessage('Select a service to book', 'error');
+      setMessage('Select one or more services to book', 'error');
       // Nudge the user to the services section if it's off-screen
       document.getElementById('services')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
@@ -280,14 +284,16 @@
         }
         return;
       }
-      setMessage(text, 'success');
-      // Refresh slots to reflect the newly booked time
-      await loadSlots();
-      form.reset();
-      setSelectedService('', null);
-      timeSelect.disabled = true;
-      barberSelect.disabled = true;
-      barberSelect.innerHTML = '<option value="" disabled selected>Choose a barber…</option>';
+  setMessage(text, 'success');
+  // Clear selections immediately for visual feedback
+  form.reset();
+  updateSelectedServices([]);
+  clearServiceSelectionVisuals();
+  timeSelect.disabled = true;
+  barberSelect.disabled = true;
+  barberSelect.innerHTML = '<option value="" disabled selected>Choose a barber…</option>';
+  // Soft refresh so the page returns to initial state (default store preselected)
+  setTimeout(() => { window.location.reload(); }, 900);
     } catch (e) {
       setMessage('Σφάλμα δικτύου κατά την κράτηση.', 'error');
     } finally {
@@ -304,7 +310,7 @@
   function resetFormState() {
     try { form?.reset(); } catch {}
     clearMessage();
-    setSelectedService('', null);
+  updateSelectedServices([]);
     // Reset selects explicitly
     if (storeSelect) storeSelect.value = '';
     if (barberSelect) {
@@ -319,7 +325,28 @@
   }
   resetFormState();
   loadStores();
-  loadServices('Nikaia');
+
+  // New: store picker behavior
+  storePicker?.addEventListener('click', (e) => {
+    const card = e.target.closest('.store-card');
+    if (!card) return;
+    const chosen = card.dataset.store;
+    // Visual selection
+    storePicker.querySelectorAll('.store-card').forEach(el => el.classList.toggle('selected', el === card));
+    // Reflect into the booking form
+    if (storeSelect) {
+      storeSelect.value = chosen;
+      // Optional: lock the select to avoid accidental change
+      // storeSelect.disabled = true;
+    }
+    // Load dependent data
+    updateSelectedServices([]);
+    loadServices(chosen);
+    loadBarbers();
+    // Nudge user to the services step
+    document.getElementById('services')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (storeHint) storeHint.textContent = '';
+  });
 
   // Ensure no preselected service (in case of browser autofill/back nav)
   if (serviceHidden) serviceHidden.value = '';
@@ -329,6 +356,30 @@
     // In case of bfcache restore, ensure UI reflects no selection
     resetFormState();
     if (!serviceHidden.value) clearServiceSelectionVisuals();
+    // Re-apply default store if needed after reset
+    try { selectDefaultStoreIfMissing(); } catch {}
   });
   // Keep Book button enabled so users see inline error if they haven't selected a service
+  
+  // Helper: preselect Store 1 (Nikaia) if none selected
+  function selectDefaultStoreIfMissing() {
+    const defaultStore = 'Nikaia';
+    if (!storeSelect) return;
+    if (!storeSelect.value) {
+      storeSelect.value = defaultStore;
+      // visually mark the card
+      const defaultCard = storePicker?.querySelector('.store-card[data-store="Nikaia"]');
+      if (defaultCard && storePicker) {
+        storePicker.querySelectorAll('.store-card').forEach(el => el.classList.toggle('selected', el === defaultCard));
+      }
+      // load dependent data without auto-scrolling
+      updateSelectedServices([]);
+      loadServices(defaultStore);
+      loadBarbers();
+      if (storeHint) storeHint.textContent = '';
+    }
+  }
+
+  // Initial default selection
+  selectDefaultStoreIfMissing();
 })();

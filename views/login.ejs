@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Admin Dashboard</title>
+  <title>Admin Dashboard • Barber Salon</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -15,8 +15,11 @@
       <div class="wrap header-inner">
         <h1 class="brand">
           <a href="/admin/login" class="brand-link">Admin Dashboard</a>
-          <% if (typeof storeLabel !== 'undefined' && storeLabel) { %>
-            <span class="badge" style="margin-left:8px;"><%= storeLabel %></span>
+          <% if (typeof storeLabel !== 'undefined' && storeLabel) { 
+               const _lbl = String(storeLabel || '');
+               const _mapped = (_lbl.includes('Νίκαια') || _lbl.includes('Nikaia')) ? 'Store 1' : ((_lbl.includes('Αιγάλεω') || _lbl.includes('Aigaleo')) ? 'Store 2' : _lbl);
+          %>
+            <span class="badge" style="margin-left:8px;"><%= _mapped %></span>
           <% } %>
         </h1>
         <nav class="nav">
@@ -42,10 +45,28 @@
               <% if (typeof error !== 'undefined' && error) { %>
                 <div class="msg error" style="margin-top:8px;"><%= error %></div>
               <% } %>
+              <div class="msg" style="margin-top:14px;">Use one of the codes:</div>
+              <div class="badges" style="margin-top:6px;">
+                <button type="button" class="badge-chip code-fill" data-code="7080616" title="Fill password with code">Store 1: 7080616</button>
+                <button type="button" class="badge-chip code-fill" data-code="7080610" title="Fill password with code">Store 2: 7080610</button>
+                <button type="button" class="badge-chip code-fill" data-code="7080619" title="Fill password with code">Master: 7080619</button>
+              </div>
             </form>
           </div>
         </div>
       </section>
     </main>
+    <script>
+      (function(){
+        const input = document.querySelector('input[name="password"]');
+        document.querySelectorAll('.code-fill').forEach(el => {
+          el.addEventListener('click', () => {
+            if (!input) return;
+            input.value = el.dataset.code || '';
+            input.focus();
+          });
+        });
+      })();
+    </script>
   </body>
 </html>

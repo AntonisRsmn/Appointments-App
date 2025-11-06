@@ -167,6 +167,26 @@ function getServiceByName(store, serviceName) {
   return list.find(s => s.name === serviceName);
 }
 
+function parseServiceList(service) {
+  if (Array.isArray(service)) return service.filter(Boolean).map(s => String(s).trim()).filter(Boolean);
+  if (typeof service === 'string') return service.split(',').map(s => s.trim()).filter(Boolean);
+  return [];
+}
+
+function getTotalDurationForServices(store, serviceField) {
+  const names = parseServiceList(serviceField);
+  if (!names.length && typeof serviceField === 'string' && serviceField) {
+    // single value not separated by comma
+    const svc = getServiceByName(store, serviceField);
+    return (svc && svc.durationMinutes) || 30;
+  }
+  let total = 0;
+  const list = getServicesForStore(store);
+  const map = new Map(list.map(s => [s.name, s.durationMinutes]));
+  names.forEach(n => { total += map.get(n) || 30; });
+  return total || 30;
+}
+
 async function getAppointmentsForDate(date, store = 'Nikaia', barbers = null) {
   if (useMemoryStore) {
     let items = memoryAppointments.filter(a => a.date === date && (a.store || 'Nikaia') === store);
@@ -182,11 +202,31 @@ async function getAppointmentsForDate(date, store = 'Nikaia', barbers = null) {
   if (barbers && Array.isArray(barbers) && barbers.length) {
     base.barber = { $in: barbers };
   }
-  return Appointment.find(base).lean();
+    const items = await Appointment.find(base).lean();
+    const toKey = (x) => `${x.date || ''}T${x.time || '00:00'}`;
+    const barberOrder = (rec) => {
+      const st = rec?.store || 'Nikaia';
+      const list = getBarbersForStore(st);
+      const idx = list.indexOf(rec?.barber || '');
+      return idx >= 0 ? (idx + 1) : 0; // 1-based index like labels
+    };
+    items.sort((a, b) => {
+      const ka = toKey(a);
+      const kb = toKey(b);
+      if (ka !== kb) return ka.localeCompare(kb);
+      const sa = (a.store || 'Nikaia');
+      const sb = (b.store || 'Nikaia');
+      if (sa !== sb) return sa.localeCompare(sb);
+      const ib = barberOrder(b) - barberOrder(a);
+      if (ib !== 0) return ib;
+      return (a.barber || '').localeCompare(b.barber || '');
+    });
+    return items;
 }
 
 function validatePayload({ name, email, phone, date, time, service, barber, store = 'Nikaia' }) {
-  if (!name || !email || !phone || !date || !time || !service || !barber) {
+  const hasService = Array.isArray(service) ? service.length > 0 : !!service;
+  if (!name || !email || !phone || !date || !time || !hasService || !barber) {
     return 'Missing required fields';
   }
   const validBarbers = getBarbersForStore(store);
@@ -234,8 +274,7 @@ async function isSlotAvailable(date, time, barber, store = 'Nikaia', durationMin
   const existingList = await Appointment.find(query).lean();
   return !existingList.some(a => {
     const apptStore = a.store || 'Nikaia';
-    const svc = getServiceByName(apptStore, a.service);
-    const dur = (svc && svc.durationMinutes) || 30;
+    const dur = getTotalDurationForServices(apptStore, a.service);
     return overlaps(time, durationMinutes, a.time, dur);
   });
 }
@@ -279,7 +318,7 @@ router.get('/slots', async (req, res) => {
       return res.status(400).json({ error: 'Invalid barber' });
     }
 
-    const duration = Number.isFinite(durationParam) && durationParam > 0 ? durationParam : 30;
+  const duration = Number.isFinite(durationParam) && durationParam > 0 ? durationParam : 30;
     const candidates = generateCandidateStarts(duration, store, date);
     if (!candidates.length) {
       // store closed on this date
@@ -301,8 +340,7 @@ router.get('/slots', async (req, res) => {
       const list = byBarber.get(b) || [];
       for (const a of list) {
         const apptStore = a.store || 'Nikaia';
-        const svc = getServiceByName(apptStore, a.service);
-        const dur = (svc && svc.durationMinutes) || 30;
+        const dur = getTotalDurationForServices(apptStore, a.service);
         if (overlaps(t, duration, a.time, dur)) return false;
       }
       return true;
@@ -351,11 +389,10 @@ router.post('/book', async (req, res) => {
   try {
     const payload = { ...(req.body || {}) };
     if (!payload.store) payload.store = 'Nikaia';
-    let { name, email, phone, date, time, service, barber, store } = payload;
+  let { name, email, phone, date, time, service, barber, store } = payload;
 
-    // Resolve duration for service
-    const svc = getServiceByName(store, service);
-    const durationMinutes = (svc && svc.durationMinutes) || 30;
+  // Resolve total duration for one or more services
+  const durationMinutes = getTotalDurationForServices(store, service);
     // Enforce store hours (start within hours and finish before close)
     const hours = getStoreHoursForDate(store, date);
     if (!hours || !isValidSlot(time, store, date) || (toMinutes(time) + durationMinutes > hours.closeMins)) {
@@ -378,7 +415,7 @@ router.post('/book', async (req, res) => {
       payload.barber = chosen;
     }
 
-    const error = validatePayload({ name, email, phone, date, time, service, barber, store });
+  const error = validatePayload({ name, email, phone, date, time, service, barber, store });
     if (error) return res.status(400).send(error);
 
     const available = await isSlotAvailable(date, time, barber, store, durationMinutes);
@@ -396,7 +433,9 @@ router.post('/book', async (req, res) => {
       });
     } else {
       try {
-        await new Appointment({ name, email, phone, date, time, service, barber, store, status: 'booked' }).save();
+        // Store combined service string if array provided
+        const serviceStr = Array.isArray(service) ? service.join(', ') : String(service || '');
+        await new Appointment({ name, email, phone, date, time, service: serviceStr, barber, store, status: 'booked' }).save();
       } catch (e) {
         // Handle unique index conflict cleanly
         if (e && e.code === 11000) {
@@ -422,7 +461,7 @@ function requireAdmin(req, res, next) {
 // GET all appointments (admin)
 router.get('/all', requireAdmin, async (req, res) => {
   try {
-    const { date, barber } = req.query;
+    const { date, barber, status } = req.query;
     const filter = {};
     // Determine store filter based on session and query
     const sessionStore = req.session && req.session.adminStore;
@@ -434,13 +473,24 @@ router.get('/all', requireAdmin, async (req, res) => {
     }
     if (date) filter.date = date;
     if (barber) filter.barber = barber;
+    if (status && ['booked','completed','cancelled'].includes(status)) filter.status = status;
 
     if (useMemoryStore) {
       let items = memoryAppointments.slice();
       if (date) items = items.filter(a => a.date === date);
       if (barber) items = items.filter(a => a.barber === barber);
+      if (filter.status) items = items.filter(a => a.status === filter.status);
       if (storeFilter) items = items.filter(a => (a.store || 'Nikaia') === storeFilter);
-      items.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+      // Sort by date asc then time asc; for identical date+time, newest created first (createdAt desc)
+      const toKey = (x) => `${x.date || ''}T${x.time || '00:00'}`;
+      items.sort((a, b) => {
+        const ka = toKey(a);
+        const kb = toKey(b);
+        if (ka !== kb) return ka.localeCompare(kb);
+        const ca = a?.createdAt || a?.updatedAt || '';
+        const cb = b?.createdAt || b?.updatedAt || '';
+        return String(cb).localeCompare(String(ca));
+      });
       return res.json(items);
     }
 
@@ -452,7 +502,8 @@ router.get('/all', requireAdmin, async (req, res) => {
         mongoFilter.store = storeFilter;
       }
     }
-    const items = await Appointment.find(mongoFilter).sort({ createdAt: -1 }).lean();
+    // Use DB sort: date asc, time asc, createdAt desc (newest first within same slot)
+    const items = await Appointment.find(mongoFilter).sort({ date: 1, time: 1, createdAt: -1 }).lean();
     res.json(items);
   } catch (err) {
     console.error(err);
@@ -508,8 +559,7 @@ router.put('/:id', requireAdmin, async (req, res) => {
     if (errMsg) return res.status(400).json({ error: errMsg });
 
     // Enforce store hours for the selected service duration
-    const svc = getServiceByName(store, service);
-    const durationMinutes = (svc && svc.durationMinutes) || 30;
+  const durationMinutes = getTotalDurationForServices(store, service);
     const hours = getStoreHoursForDate(store, date);
     if (!hours || !isValidSlot(time, store, date) || (toMinutes(time) + durationMinutes > hours.closeMins)) {
       return res.status(400).json({ error: 'Invalid time slot' });
@@ -533,7 +583,7 @@ router.put('/:id', requireAdmin, async (req, res) => {
     const conflict = await Appointment.findOne({ barber, date, time, _id: { $ne: id } }).lean();
     if (conflict) return res.status(409).json({ error: 'Selected time is no longer available' });
 
-    const update = { name, email, phone, date, time, service, barber, store };
+  const update = { name, email, phone, date, time, service: Array.isArray(service) ? service.join(', ') : service, barber, store };
     if (status && ['booked', 'completed', 'cancelled'].includes(status)) update.status = status;
     const sessionStore = req.session && req.session.adminStore;
     // Ensure the appointment belongs to the admin's store

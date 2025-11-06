@@ -15,8 +15,11 @@
       <div class="wrap header-inner">
         <h1 class="brand">
           <a href="/admin" class="brand-link">Admin Dashboard</a>
-          <% if (typeof lockedStoreLabel !== 'undefined' && lockedStoreLabel) { %>
-            <span class="badge" style="margin-left:8px;"><%= lockedStoreLabel %></span>
+          <% if (typeof lockedStoreLabel !== 'undefined' && lockedStoreLabel) { 
+               const _lbl = String(lockedStoreLabel || '');
+               const _mapped = (_lbl.includes('Νίκαια') || _lbl.includes('Nikaia')) ? 'Store 1' : ((_lbl.includes('Αιγάλεω') || _lbl.includes('Aigaleo')) ? 'Store 2' : _lbl);
+          %>
+            <span class="badge" style="margin-left:8px;"><%= _mapped %></span>
           <% } %>
         </h1>
         <nav class="nav">
@@ -64,6 +67,7 @@
               <div style="display:flex; align-items:flex-end; gap:8px;">
                 <button id="btnRefresh" class="btn" type="button">Refresh</button>
                 <button id="btnClear" class="btn btn-ghost" type="button">Clear</button>
+                <button id="btnCompleted" class="btn btn-ghost" type="button" title="Show completed appointments">Completed</button>
                 <button id="btnCreate" class="btn btn-success" type="button">Create</button>
               </div>
             </div>
@@ -73,7 +77,6 @@
             <table class="table" id="appointmentsTable">
               <thead>
                 <tr>
-                  <th>Created</th>
                   <th>Date</th>
                   <th>Time</th>
                   <th>Store</th>
@@ -87,7 +90,7 @@
                 </tr>
               </thead>
               <tbody>
-                <tr><td colspan="11" style="text-align:center; color:#666;">Loading…</td></tr>
+                <tr><td colspan="10" style="text-align:center; color:#666;">Loading…</td></tr>
               </tbody>
             </table>
           </div>
@@ -98,7 +101,7 @@
     <!-- Edit modal -->
     <div id="editModal" class="modal" hidden>
       <div class="modal-content">
-        <h3>Edit appointment</h3>
+        <h3 id="editModalTitle">Edit appointment</h3>
         <form id="editForm">
           <input type="hidden" name="_id" id="editId" />
           <div class="row">
@@ -146,7 +149,7 @@
             </label>
           </div>
           <div class="actions">
-            <button type="submit" class="btn">Save</button>
+            <button type="submit" class="btn" id="editSubmit">Save</button>
             <button type="button" class="btn btn-ghost" id="editCancel">Cancel</button>
             <% if (!(typeof lockedStore !== 'undefined' && lockedStore)) { %>
               <button type="button" class="btn btn-danger" id="editDelete">Delete</button>
@@ -160,7 +163,7 @@
     <footer class="footer">
       <div class="wrap footer-contact">
         <h3 class="footer-title">Επικοινωνία</h3>
-        <ul class="contact-list" aria-label="contact details">
+  <ul class="contact-list" aria-label="contact details">
           <li>
             <span class="icon" aria-hidden="true">
               <svg class="icon-svg" viewBox="0 0 24 24" width="18" height="18" fill="currentColor" focusable="false" aria-hidden="true"><path d="M20 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Zm0 2v.01L12 12 4 6.01V6h16ZM4 18V8.11l7.4 5.55a1 1 0 0 0 1.2 0L20 8.11V18H4Z"/></svg>
@@ -171,17 +174,11 @@
             <span class="icon" aria-hidden="true">
               <svg class="icon-svg" viewBox="0 0 24 24" width="18" height="18" fill="currentColor" focusable="false" aria-hidden="true"><path d="M6.62 10.79a15.05 15.05 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.01-.24c1.1.37 2.28.57 3.5.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C10.3 21 3 13.7 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.22.2 2.4.57 3.5a1 1 0 0 1-.24 1.01l-2.2 2.2Z"/></svg>
             </span>
-            <span class="label">Νίκαια:</span> <a href="tel:+302110029424">211 002 9424</a>
-          </li>
-          <li>
-            <span class="icon" aria-hidden="true">
-              <svg class="icon-svg" viewBox="0 0 24 24" width="18" height="18" fill="currentColor" focusable="false" aria-hidden="true"><path d="M6.62 10.79a15.05 15.05 0 0 0 6.59 6.59l2.2-2.2a1 1 0 0 1 1.01-.24c1.1.37 2.28.57 3.5.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C10.3 21 3 13.7 3 4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1c0 1.22.2 2.4.57 3.5a1 1 0 0 1-.24 1.01l-2.2 2.2Z"/></svg>
-            </span>
-            <span class="label">Αιγάλεω:</span> <a href="tel:+302110066752">211 006 6752</a>
+            <span class="label">Phone:</span> <a href="tel:+302100000000">210 000 0000</a>
           </li>
         </ul>
         <div class="footer-divider" role="presentation"></div>
-        <div class="copyright">© <span id="year"></span> NA Cuts Barber Salon · Website by <strong>Antonios Rusman</strong>.</div>
+  <div class="copyright">© <span id="year"></span> Barber Salon · Website by <strong>Antonios Rusman</strong>.</div>
       </div>
     </footer>
 

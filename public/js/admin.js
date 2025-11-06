@@ -1,7 +1,7 @@
 (() => {
   const STORE_LABELS = {
-    'Nikaia': 'Ολύμπου 11, Νίκαια',
-    'Aigaleo': 'Μαρκ. Μπότσαρη 9, Αιγάλεω'
+    'Nikaia': 'Store 1',
+    'Aigaleo': 'Store 2'
   };
   const table = document.getElementById('appointmentsTable');
   const tbody = table.querySelector('tbody');
@@ -11,10 +11,31 @@
   const btnRefresh = document.getElementById('btnRefresh');
   const btnClear = document.getElementById('btnClear');
   const btnCreate = document.getElementById('btnCreate');
+  const btnCompleted = document.getElementById('btnCompleted');
   const adminMsg = document.getElementById('adminMsg');
 
   const y = document.getElementById('year');
   if (y) y.textContent = new Date().getFullYear();
+
+  // Enumerated labels per store for barbers (Barber 1, Barber 2, ...)
+  const BARBER_INDEX = { Nikaia: new Map(), Aigaleo: new Map() };
+  async function refreshBarberIndex(store) {
+    try {
+      const res = await fetch('/appointments/barbers?' + new URLSearchParams({ store }));
+      const list = await res.json();
+      const map = new Map();
+      list.forEach((name, i) => map.set(name, i + 1));
+      BARBER_INDEX[store] = map;
+    } catch {}
+  }
+  async function ensureAllBarberIndexes() {
+    await Promise.all(['Nikaia', 'Aigaleo'].map(refreshBarberIndex));
+  }
+  function labelBarber(name, store) {
+    if (!name) return '';
+    const idx = BARBER_INDEX[store || 'Nikaia']?.get(name);
+    return idx ? `Barber ${idx}` : name;
+  }
 
   function fmtDateTime(iso) {
     if (!iso) return '';
@@ -49,7 +70,7 @@
 
   function renderRows(items) {
     if (!items || !items.length) {
-      tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; color:#666;">No appointments</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color:#666;">No appointments</td></tr>';
       return;
     }
     tbody.innerHTML = items.map(a => {
@@ -59,11 +80,10 @@
       const statusClass = `status-${status}`;
       return `
       <tr class="${rowClass}" data-id="${a._id}">
-        <td>${fmtDateTime(a.createdAt)}</td>
         <td>${a.date || ''}</td>
         <td>${a.time || ''}</td>
   <td>${STORE_LABELS[a.store || 'Nikaia'] || (a.store || 'Nikaia')}</td>
-        <td>${a.barber || ''}</td>
+  <td>${labelBarber(a.barber || '', a.store || 'Nikaia')}</td>
         <td>${a.service || ''}</td>
         <td>${a.name || ''}</td>
         <td>${a.email || ''}</td>
@@ -90,17 +110,39 @@
       const res = await fetch('/appointments/stores');
       const stores = await res.json();
       if (filterStore) filterStore.innerHTML = '<option value="">All stores</option>' + stores.map(s => `<option value="${s}">${STORE_LABELS[s] || s}</option>`).join('');
+      // Build barber index maps for all stores
+      await ensureAllBarberIndexes();
     } catch (e) { /* noop */ }
   }
 
   async function loadBarbers() {
     try {
-      const params = new URLSearchParams();
-      if (filterStore && filterStore.value) params.set('store', filterStore.value);
-      const res = await fetch('/appointments/barbers' + (params.toString() ? ('?' + params.toString()) : ''));
-      const barbers = await res.json();
+      const selectedStore = (filterStore && filterStore.value) || '';
+      let barbers = [];
+      if (selectedStore) {
+        // Single store
+        const res = await fetch('/appointments/barbers?' + new URLSearchParams({ store: selectedStore }));
+        barbers = await res.json();
+        const map = new Map();
+        barbers.forEach((name, i) => map.set(name, i + 1));
+        BARBER_INDEX[selectedStore] = map;
+      } else {
+        // All stores: union of barbers across every store
+        const resStores = await fetch('/appointments/stores');
+        const stores = await resStores.json();
+        const lists = await Promise.all(stores.map(s => fetch('/appointments/barbers?' + new URLSearchParams({ store: s })).then(r => r.json()).catch(() => [])));
+        const set = new Set();
+        lists.forEach(arr => arr.forEach(name => set.add(name)));
+        barbers = [...set];
+        // Build/refresh per-store indexes too
+        stores.forEach((s, storeIdx) => {
+          const map = new Map();
+          (lists[storeIdx] || []).forEach((name, i) => map.set(name, i + 1));
+          BARBER_INDEX[s] = map;
+        });
+      }
       filterBarber.innerHTML = '<option value="">All barbers</option>' +
-        barbers.map(b => `<option value="${b}">${b}</option>`).join('');
+        barbers.map((b, i) => `<option value="${b}">Barber ${i + 1}</option>`).join('');
     } catch (e) {
       // ignore
     }
@@ -111,22 +153,55 @@
     if (filterBarber.value) params.set('barber', filterBarber.value);
     if (filterDate.value) params.set('date', filterDate.value);
     if (filterStore && filterStore.value) params.set('store', filterStore.value);
+    if (loadAppointments.completedMode) params.set('status', 'completed');
 
-  tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; color:#666;">Loading…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color:#666;">Loading…</td></tr>';
     try {
+      if (loadAppointments.completedMode) setAdminMsg('Showing completed appointments', 'info', 1500);
       const res = await fetch('/appointments/all' + (params.toString() ? ('?' + params.toString()) : ''));
-      const items = await res.json();
+      let items = await res.json();
+      // Enforce client-side guardrails for status filtering to match UX expectations
+      if (loadAppointments.completedMode) {
+        // Completed view: show only completed
+        items = (items || []).filter(a => (a && a.status) === 'completed');
+      } else {
+        // Default view: hide completed by default
+        items = (items || []).filter(a => (a && a.status) !== 'completed');
+      }
+      // Client-side stable sort to guarantee grouping; within same date+time, newest first
+      const keyDate = (x) => x?.date || '';
+      const keyTime = (x) => x?.time || '';
+      items.sort((a, b) => {
+        const d = keyDate(a).localeCompare(keyDate(b));
+        if (d !== 0) return d;
+        const t = keyTime(a).localeCompare(keyTime(b));
+        if (t !== 0) return t;
+        const ca = a?.createdAt || a?.updatedAt || '';
+        const cb = b?.createdAt || b?.updatedAt || '';
+        return String(cb).localeCompare(String(ca));
+      });
       renderRows(items);
     } catch (e) {
-      tbody.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#c00;">Failed to load</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10" style="text-align:center; color:#c00;">Failed to load</td></tr>';
     }
   }
+  loadAppointments.completedMode = false;
 
   btnRefresh?.addEventListener('click', loadAppointments);
   btnClear?.addEventListener('click', () => {
     filterBarber.value = '';
     filterDate.value = '';
     if (filterStore && filterStore.dataset.locked !== 'true') filterStore.value = '';
+    loadAppointments.completedMode = false;
+    if (btnCompleted) btnCompleted.textContent = 'Completed';
+    loadAppointments();
+  });
+  btnCompleted?.addEventListener('click', () => {
+    loadAppointments.completedMode = !loadAppointments.completedMode;
+    if (btnCompleted) {
+      btnCompleted.textContent = loadAppointments.completedMode ? 'Show All' : 'Completed';
+      btnCompleted.setAttribute('aria-pressed', String(loadAppointments.completedMode));
+    }
     loadAppointments();
   });
   filterStore?.addEventListener('change', () => { loadBarbers(); loadAppointments(); });
@@ -152,8 +227,11 @@
           setAdminMsg(msg || 'Failed to update status', 'error');
           return;
         }
+        // Keep current view after update; do not auto-switch to Completed section
+        if (newStatus === 'completed') setAdminMsg('Marked as completed', 'success');
+        else if (newStatus === 'booked') setAdminMsg('Marked as booked', 'success');
+        else setAdminMsg('Status updated', 'success');
         await loadAppointments();
-        setAdminMsg('Status updated', 'success');
       } catch (err) {
         setAdminMsg('Network error while updating status', 'error');
       } finally {
@@ -180,6 +258,8 @@
   const editBarber = document.getElementById('editBarber');
   const editDate = document.getElementById('editDate');
   const editTime = document.getElementById('editTime');
+  const editTitle = document.getElementById('editModalTitle');
+  const editSubmit = document.getElementById('editSubmit');
 
   function setEditMsg(t, type='info') { editMsg.textContent = t || ''; editMsg.className = `msg ${type}`; }
   function showModal() { modal.hidden = false; }
@@ -232,8 +312,13 @@
         (async () => {
           const resB = await fetch('/appointments/barbers?' + new URLSearchParams({ store: (a.store || 'Nikaia') }));
           const barbers = await resB.json();
+          // Update index for this store
+          const st = a.store || 'Nikaia';
+          const map = new Map();
+          barbers.forEach((name, i) => map.set(name, i + 1));
+          BARBER_INDEX[st] = map;
           // In edit mode, force specific barber (no ANY)
-          editBarber.innerHTML = barbers.map(b => `<option value="${b}">${b}</option>`).join('');
+          editBarber.innerHTML = barbers.map((b, i) => `<option value="${b}">Barber ${i + 1}</option>`).join('');
         })()
       ]);
       // If the service isn't found in options (legacy), add it
@@ -269,6 +354,9 @@
         }
         editTime.value = currentTime;
       }
+  // Title and buttons for edit mode
+  if (editTitle) editTitle.textContent = 'Edit appointment';
+  if (editSubmit) editSubmit.textContent = 'Save';
   // Ensure delete button visible for edit (if present, i.e., master admin view)
   if (editDelete) editDelete.style.display = '';
   showModal();
@@ -305,12 +393,20 @@
     try {
       const resB = await fetch('/appointments/barbers?' + new URLSearchParams({ store: (editStore && editStore.value) || 'Nikaia' }));
       const barbers = await resB.json();
+      // Update index for default store
+      const st = (editStore && editStore.value) || 'Nikaia';
+      const map = new Map();
+      barbers.forEach((name, i) => map.set(name, i + 1));
+      BARBER_INDEX[st] = map;
       editBarber.innerHTML = `<option value="ANY">Οποιοσδήποτε Υπάλληλος</option>` +
-        barbers.map(b => `<option value="${b}">${b}</option>`).join('');
+        barbers.map((b, i) => `<option value="${b}">Barber ${i + 1}</option>`).join('');
       // No barber selected initially
       editBarber.insertAdjacentHTML('afterbegin', '<option value="" disabled selected>Choose a barber…</option>');
     } catch {}
 
+  // Title and buttons for create mode
+  if (editTitle) editTitle.textContent = 'Create appointment';
+  if (editSubmit) editSubmit.textContent = 'Create';
   // Hide delete button in create mode even for master admin
   if (editDelete) editDelete.style.display = 'none';
   showModal();
@@ -343,10 +439,15 @@
     try {
       const resB = await fetch('/appointments/barbers?' + new URLSearchParams({ store: (editStore && editStore.value) || 'Nikaia' }));
       const barbers = await resB.json();
+      // Update index for selected store
+      const st = (editStore && editStore.value) || 'Nikaia';
+      const map = new Map();
+      barbers.forEach((name, i) => map.set(name, i + 1));
+      BARBER_INDEX[st] = map;
       // In edit mode (existing id), do not include the ANY option, as backend requires a specific barber.
       const isEditing = !!(editId && editId.value);
       editBarber.innerHTML = (isEditing ? '' : `<option value="ANY">Οποιοσδήποτε Υπάλληλος</option>`) +
-        barbers.map(b => `<option value="${b}">${b}</option>`).join('');
+        barbers.map((b, i) => `<option value="${b}">Barber ${i + 1}</option>`).join('');
     } catch {}
     // Reload services for the selected store
     try { await loadServiceOptions((editStore && editStore.value) || 'Nikaia'); } catch {}
@@ -427,5 +528,21 @@
   // Refresh slots when service changes to align time grid with duration
   editService?.addEventListener('change', loadEditSlots);
 
-  loadStores().then(loadBarbers).then(loadAppointments);
+  // Set default date to today on first load if empty
+  function todayLocalYYYYMMDD() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dd}`;
+  }
+
+  (async function initAdmin() {
+    await loadStores();
+    await loadBarbers();
+    if (filterDate && !filterDate.value) {
+      filterDate.value = todayLocalYYYYMMDD();
+    }
+    await loadAppointments();
+  })();
 })();
