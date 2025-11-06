@@ -8,7 +8,22 @@ try {
 } catch {}
 const bcrypt = require('bcryptjs');
 const helmet = require('helmet');
-require('dotenv').config();
+// Silence dotenv v17 console banner without affecting other logs
+try {
+  const _log = console.log, _warn = console.warn;
+  console.log = function(...args) {
+    if (args && args[0] && String(args[0]).startsWith('[dotenv@')) return;
+    return _log.apply(this, args);
+  };
+  console.warn = function(...args) {
+    if (args && args[0] && String(args[0]).startsWith('[dotenv@')) return;
+    return _warn.apply(this, args);
+  };
+  require('dotenv').config();
+  console.log = _log; console.warn = _warn;
+} catch (e) {
+  try { require('dotenv').config(); } catch {}
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
