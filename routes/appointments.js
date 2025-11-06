@@ -47,6 +47,56 @@ const SERVICES_BASE = [
   { id: 'wax-face', category: 'Αποτρίχωση Με Κερί Και Κλωστή', name: 'Αποτρίχωση με Κερί Πρόσωπο', durationMinutes: 30, price: 5 },
 ];
 
+// Translation tables (Greek -> English)
+const CATEGORY_EL_TO_EN = {
+  'Κούρεμα Αντρικό': "Men's Haircuts",
+  'Μούσι': 'Beard',
+  'Θεραπείες Μαλλιών Και Τριχωτού Κεφαλής': 'Hair & Scalp Treatments',
+  'Σχηματισμός Και Αποτρίχωση Φρυδιών': 'Eyebrow Shaping & Hair Removal',
+  'Κούρεμα Παιδικό': 'Kids Haircut',
+  'Θεραπείες Προσώπου': 'Facial Treatments',
+  'Αποτρίχωση Με Κερί Και Κλωστή': 'Waxing & Threading'
+};
+const SERVICE_EL_TO_EN = {
+  'Κούρεμα με shaver ή trimmer': 'Haircut with shaver or trimmer',
+  'Κούρεμα Αντρικό': "Men's Haircut",
+  'Buzz cut': 'Buzz cut',
+  'Κούρεμα Συνταξιούχων': 'Senior Haircut',
+  'Κούρεμα κλασικό (μόνο χτένα & ψαλίδι)': 'Classic Haircut (comb & scissors only)',
+  'Fade Refresh': 'Fade Refresh',
+  'Περιποίηση γενειάδας πολυτελείας': 'Luxury Beard Grooming',
+  'Τριμάρισμα γενειάδας & σχήμα': 'Beard Trim & Shape',
+  'Κούρεμα με shaver ή trimmer & Περιποίηση γενειάδας': 'Haircut with shaver/trimmer & Beard Care',
+  'Παραδοσιακό Ξύρισμα': 'Traditional Shave',
+  'Λούσιμο': 'Wash',
+  'Σχηματισμός Φρυδιών': 'Eyebrow Shaping',
+  'Καθαρισμός Φρυδιών': 'Eyebrow Tidy',
+  'Κούρεμα Παιδικό': 'Kids Haircut',
+  'Καθαρισμός Προσώπου': 'Face Cleansing',
+  'Καθαρισμός αυτιών': 'Ear Cleaning',
+  'Πακέτο Γενικής Περιποίησης': 'Total Care Package',
+  'Αποτρίχωση με κερί μύτη-αυτιά': 'Waxing (nose & ears)',
+  'Αποτρίχωση με Κερί Πρόσωπο': 'Face Waxing'
+};
+
+function invert(obj) {
+  const out = {};
+  Object.keys(obj).forEach(k => { out[obj[k]] = k; });
+  return out;
+}
+const CATEGORY_EN_TO_EL = invert(CATEGORY_EL_TO_EN);
+const SERVICE_EN_TO_EL = invert(SERVICE_EL_TO_EN);
+
+function toEN_Category(label) {
+  return CATEGORY_EL_TO_EN[label] || label;
+}
+function toEN_Service(name) {
+  return SERVICE_EL_TO_EN[name] || name;
+}
+function toEL_Service(name) {
+  return SERVICE_EN_TO_EL[name] || name;
+}
+
 // Aigaleo-specific overrides based on provided pricing
 const AIGALEO_OVERRIDES = {
   'men-shaver-trimmer': { price: 15 },
@@ -164,7 +214,10 @@ function getBarbersForStore(store = 'Nikaia') {
 
 function getServiceByName(store, serviceName) {
   const list = getServicesForStore(store);
-  return list.find(s => s.name === serviceName);
+  // Try direct match, EL<->EN translation match
+  const elName = toEL_Service(serviceName);
+  const enAlt = toEN_Service(serviceName);
+  return list.find(s => s.name === serviceName || s.name === elName || toEN_Service(s.name) === serviceName || toEN_Service(s.name) === enAlt);
 }
 
 function parseServiceList(service) {
@@ -176,14 +229,14 @@ function parseServiceList(service) {
 function getTotalDurationForServices(store, serviceField) {
   const names = parseServiceList(serviceField);
   if (!names.length && typeof serviceField === 'string' && serviceField) {
-    // single value not separated by comma
     const svc = getServiceByName(store, serviceField);
     return (svc && svc.durationMinutes) || 30;
   }
   let total = 0;
-  const list = getServicesForStore(store);
-  const map = new Map(list.map(s => [s.name, s.durationMinutes]));
-  names.forEach(n => { total += map.get(n) || 30; });
+  names.forEach(n => {
+    const svc = getServiceByName(store, n);
+    total += (svc && svc.durationMinutes) || 30;
+  });
   return total || 30;
 }
 
@@ -288,9 +341,12 @@ router.get('/stores', (req, res) => {
 router.get('/services', (req, res) => {
   const store = req.query.store || 'Nikaia';
   const catalog = getServicesForStore(store);
+  // Always return English labels to the client UI
   const byCat = catalog.reduce((acc, s) => {
-    acc[s.category] = acc[s.category] || [];
-    acc[s.category].push({ id: s.id, name: s.name, durationMinutes: s.durationMinutes, price: s.price });
+    const catEN = toEN_Category(s.category);
+    const nameEN = toEN_Service(s.name);
+    acc[catEN] = acc[catEN] || [];
+    acc[catEN].push({ id: s.id, name: nameEN, durationMinutes: s.durationMinutes, price: s.price });
     return acc;
   }, {});
   res.json(byCat);

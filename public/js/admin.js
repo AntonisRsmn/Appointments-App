@@ -398,7 +398,7 @@
       const map = new Map();
       barbers.forEach((name, i) => map.set(name, i + 1));
       BARBER_INDEX[st] = map;
-      editBarber.innerHTML = `<option value="ANY">Οποιοσδήποτε Υπάλληλος</option>` +
+      editBarber.innerHTML = `<option value="ANY">Any Barber</option>` +
         barbers.map((b, i) => `<option value="${b}">Barber ${i + 1}</option>`).join('');
       // No barber selected initially
       editBarber.insertAdjacentHTML('afterbegin', '<option value="" disabled selected>Choose a barber…</option>');
@@ -417,9 +417,8 @@
   editDelete?.addEventListener('click', async () => {
     const id = editId.value;
     if (!id) return;
-    const sure = confirm('Delete this appointment? This cannot be undone.');
-    if (!sure) return;
     setEditMsg('Deleting…');
+    editDelete.disabled = true;
     try {
       const res = await fetch(`/appointments/${id}`, { method: 'DELETE' });
       if (!res.ok) {
@@ -432,6 +431,8 @@
       setAdminMsg('Appointment deleted', 'success');
     } catch (err) {
       setEditMsg('Network error', 'error');
+    } finally {
+      editDelete.disabled = false;
     }
   });
 
@@ -446,7 +447,7 @@
       BARBER_INDEX[st] = map;
       // In edit mode (existing id), do not include the ANY option, as backend requires a specific barber.
       const isEditing = !!(editId && editId.value);
-      editBarber.innerHTML = (isEditing ? '' : `<option value="ANY">Οποιοσδήποτε Υπάλληλος</option>`) +
+      editBarber.innerHTML = (isEditing ? '' : `<option value="ANY">Any Barber</option>`) +
         barbers.map((b, i) => `<option value="${b}">Barber ${i + 1}</option>`).join('');
     } catch {}
     // Reload services for the selected store

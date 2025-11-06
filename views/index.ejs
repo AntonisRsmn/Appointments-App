@@ -21,11 +21,11 @@
     </header>
 
     <main>
-      <!-- Big image hero with slogan and CTA -->
-  <section class="masthead" style="--hero:url('/images/bg2.jpg')">
+    <!-- Big image hero with slogan and CTA -->
+  <section class="masthead" style="--hero:url('/images/men-beauty-health-concept-various-600nw-1760076965.webp')">
         <div class="wrap">
           <div class="hero-copy">
-            <h2 class="title">Υπηρεσιες</h2>
+            <h2 class="title">Services</h2>
             <p class="subtitle">Classic craft, modern service — two locations in Athens.</p>
             <div style="margin-top:8px; display:flex; gap:12px;">
               <a href="#book" class="btn">Book now</a>
@@ -40,8 +40,8 @@
       <!-- Step 1: Choose a store -->
       <section class="hero full" id="choose-store">
         <div class="wrap">
+          <h2 class="section-title">Choose a store</h2>
           <div class="hero-card hero-store">
-            <h3 style="margin:0 0 12px;">Choose a store</h3>
             <div class="store-picker" id="storePicker">
               <button type="button" class="store-card" data-store="Nikaia">
                 <div class="store-title">Store 1</div>
@@ -50,7 +50,7 @@
                     <path d="M3 10V4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v6h-2V6H5v4H3Zm0 2h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-8Zm4 2v6h2v-6H7Zm6 0v6h2v-6h-2Z"/>
                   </svg>
                 </div>
-                <div class="store-sub">Οδός Δείγματος 123, Αθήνα</div>
+                <div class="store-sub">123 Demo Street, Athens</div>
               </button>
               <button type="button" class="store-card" data-store="Aigaleo">
                 <div class="store-title">Store 2</div>
@@ -59,28 +59,31 @@
                     <path d="M3 10V4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v6h-2V6H5v4H3Zm0 2h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-8Zm4 2v6h2v-6H7Zm6 0v6h2v-6h-2Z"/>
                   </svg>
                 </div>
-                <div class="store-sub">Οδός Δείγματος 456, Αθήνα</div>
+                <div class="store-sub">456 Demo Avenue, Athens</div>
               </button>
             </div>
             <div class="msg" id="storeHint">Pick a store to load the services.</div>
           </div>
         </div>
+        <span class="fade-edge" aria-hidden="true"></span>
       </section>
 
       <!-- Full-width services section for symmetry and visibility -->
   <section class="hero full" id="services">
         <div class="wrap">
+          <h2 class="section-title">Services</h2>
           <div class="hero-card">
-            <h3 style="margin:0 0 12px;">Υπηρεσίες</h3>
             <div id="servicesPicker" class="services"><!-- filled by JS --></div>
             <div id="selectedServiceNote" class="msg" style="margin-top:8px;"></div>
           </div>
         </div>
+        <span class="fade-edge" aria-hidden="true"></span>
       </section>
 
       <!-- Step 3: Fill your details and book -->
   <section class="hero full">
         <div class="wrap">
+          <h2 class="section-title">Book an Appointment</h2>
           <div id="book" class="hero-card">
             <form id="appointmentForm" class="form" action="/appointments/book" method="POST">
               <input type="hidden" name="service" id="serviceHidden" />
@@ -127,6 +130,7 @@
             </form>
           </div>
         </div>
+        <span class="fade-edge" aria-hidden="true"></span>
       </section>
 
       
@@ -134,7 +138,7 @@
 
     <footer class="footer">
       <div class="wrap footer-contact">
-        <h3 class="footer-title">Επικοινωνία</h3>
+  <h3 class="footer-title">Contact</h3>
   <ul class="contact-list" aria-label="contact details">
           <li>
             <span class="icon" aria-hidden="true">

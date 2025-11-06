@@ -44,10 +44,10 @@
     serviceHidden.value = selectedServices.map(s => s.name).join(', ');
     if (selectedServiceNote) {
       if (selectedServices.length) {
-        const totalMin = selectedServices.reduce((sum, s) => sum + (Number(s.durationMinutes) || 0), 0);
-        const totalPrice = selectedServices.reduce((sum, s) => sum + (Number(s.price) || 0), 0);
-        const names = selectedServices.map(s => s.name).join(' + ');
-        selectedServiceNote.textContent = `${names} • ${totalMin} λεπτά • € ${totalPrice}`;
+  const totalMin = selectedServices.reduce((sum, s) => sum + (Number(s.durationMinutes) || 0), 0);
+  const totalPrice = selectedServices.reduce((sum, s) => sum + (Number(s.price) || 0), 0);
+  const names = selectedServices.map(s => s.name).join(' + ');
+  selectedServiceNote.textContent = `${names} • ${totalMin} min • € ${totalPrice}`;
         selectedServiceNote.className = 'msg';
         clearMessage();
       } else {
@@ -64,10 +64,10 @@
     if (!servicesPicker) return;
     // Remove selected row highlight
     servicesPicker.querySelectorAll('.service-item.selected').forEach(el => el.classList.remove('selected'));
-    // Reset any selected buttons back to "Επιλογή"
+  // Reset any selected buttons back to "Select"
     servicesPicker.querySelectorAll('button[data-name].selected').forEach(btn => {
       btn.classList.remove('selected');
-      btn.textContent = 'Επιλογή';
+  btn.textContent = 'Select';
     });
   }
 
@@ -103,13 +103,14 @@
         (byCat[cat] || []).forEach(item => {
           const row = document.createElement('div');
           row.className = 'service-item';
+          const durLabel = item.durationMinutes >= 60 ? `${Math.floor(item.durationMinutes/60)}h${item.durationMinutes%60 ? ` ${item.durationMinutes%60}m` : ''}` : `${item.durationMinutes}m`;
           row.innerHTML = `
             <div>
               <div class="service-name">${item.name}</div>
-              <div class="service-meta">${item.durationMinutes >= 60 ? `${Math.floor(item.durationMinutes/60)} ώρα ${item.durationMinutes%60 ? item.durationMinutes%60 + ' λεπτά' : ''}` : `${item.durationMinutes} λεπτά`} · Προβολή Λεπτομερειών</div>
+              <div class="service-meta">${durLabel} · View details</div>
             </div>
             <div class="service-price">€ ${item.price}</div>
-            <div><button type="button" class="btn btn-outline btn-select" data-name="${item.name}" data-duration="${item.durationMinutes}" data-price="${item.price}">Επιλογή</button></div>
+            <div><button type="button" class="btn btn-outline btn-select" data-name="${item.name}" data-duration="${item.durationMinutes}" data-price="${item.price}">Select</button></div>
           `;
           listWrap.appendChild(row);
         });
@@ -119,7 +120,7 @@
           [...listWrap.querySelectorAll('button[data-name]')].forEach(btn => {
             if (selectedNames.has(btn.dataset.name)) {
               btn.classList.add('selected');
-              btn.textContent = 'Επιλεγμένο';
+              btn.textContent = 'Selected';
               btn.closest('.service-item')?.classList.add('selected');
             }
           });
@@ -148,14 +149,14 @@
         if (isSelected) {
           // Remove from selection
           btn.classList.remove('selected');
-          btn.textContent = 'Επιλογή';
+          btn.textContent = 'Select';
           btn.closest('.service-item')?.classList.remove('selected');
           updateSelectedServices(selectedServices.filter(s => s.name !== info.name));
           return;
         }
         // Add to selection
         btn.classList.add('selected');
-        btn.textContent = 'Επιλεγμένο';
+  btn.textContent = 'Selected';
         btn.closest('.service-item')?.classList.add('selected');
         updateSelectedServices([...selectedServices, info]);
         // Do not auto-scroll the page when a service is selected
@@ -182,13 +183,13 @@
       const store = storeSelect.value || 'Nikaia';
       const res = await fetch('/appointments/barbers?' + new URLSearchParams({ store }));
       const barbers = await res.json();
-      const anyoneOption = `<option value=\"ANY\">Οποιοσδήποτε Υπάλληλος</option>`;
+  const anyoneOption = `<option value=\"ANY\">Any Barber</option>`;
       // Display enumerated barber labels (Barber 1, Barber 2, ...), keep original values for backend queries
       barberSelect.innerHTML = '<option value=\"\" disabled>Choose a barber…</option>' +
         anyoneOption +
         barbers.map((b, i) => `<option value=\"${b}\">Barber ${i + 1}</option>`).join('');
       barberSelect.disabled = false;
-      // Default to Οποιοσδήποτε Υπάλληλος
+  // Default to Any Barber
       barberSelect.value = 'ANY';
     } catch (e) {
       setMessage('Failed to load barbers.', 'error');
@@ -256,7 +257,7 @@
       return;
     }
 
-    setMessage('Κλείνουμε το ραντεβού σας…', 'info');
+  setMessage('Booking your appointment…', 'info');
     if (submitBtn) submitBtn.disabled = true;
     try {
       const res = await fetch('/appointments/book', {
@@ -295,7 +296,7 @@
   // Soft refresh so the page returns to initial state (default store preselected)
   setTimeout(() => { window.location.reload(); }, 900);
     } catch (e) {
-      setMessage('Σφάλμα δικτύου κατά την κράτηση.', 'error');
+  setMessage('Network error while booking.', 'error');
     } finally {
       if (submitBtn) submitBtn.disabled = false;
     }
@@ -382,4 +383,32 @@
 
   // Initial default selection
   selectDefaultStoreIfMissing();
+
+  // Randomize a few subtle white glows per section so they are not fixed
+  function rand(min, max) { return Math.random() * (max - min) + min; }
+  function clamp(n, a, b) { return Math.max(a, Math.min(b, n)); }
+  function buildRandGlows(el, minCount = 2, maxCount = 4) {
+    try {
+      const rect = el.getBoundingClientRect();
+      const count = Math.floor(rand(minCount, maxCount + 1));
+      const parts = [];
+      for (let i = 0; i < count; i++) {
+        const xPct = clamp(Math.round(rand(-5, 105)), -5, 105);
+        const yPct = clamp(Math.round(rand(-5, 105)), -5, 105);
+        const base = Math.max(rect.width, rect.height);
+        const rx = Math.round(rand(base * 0.14, base * 0.28));
+        const ry = Math.round(rand(base * 0.08, base * 0.20));
+        const alpha = rand(0.028, 0.065).toFixed(3);
+        parts.push(`radial-gradient(${rx}px ${ry}px at ${xPct}% ${yPct}%, rgba(255,255,255,${alpha}), transparent 70%)`);
+      }
+      el.style.setProperty('--rand-glows', parts.join(', '));
+    } catch {}
+  }
+  function applySectionGlows() {
+    document.querySelectorAll('.masthead, .hero.full').forEach(el => buildRandGlows(el));
+  }
+  let glowDebounce;
+  window.addEventListener('resize', () => { clearTimeout(glowDebounce); glowDebounce = setTimeout(applySectionGlows, 150); });
+  if (document.readyState === 'complete' || document.readyState === 'interactive') applySectionGlows();
+  else window.addEventListener('DOMContentLoaded', applySectionGlows, { once: true });
 })();
