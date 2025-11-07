@@ -13,13 +13,13 @@
   <body>
     <header class="header">
       <div class="wrap header-inner">
-        <h1 class="brand">
-          <a href="/admin" class="brand-link">Admin Dashboard</a>
+        <h1 class="brand" style="display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;">
+          <a href="/admin" class="brand-link" style="line-height:1">Admin Dashboard</a>
           <% if (typeof lockedStoreLabel !== 'undefined' && lockedStoreLabel) { 
                const _lbl = String(lockedStoreLabel || '');
                const _mapped = (_lbl.includes('Νίκαια') || _lbl.includes('Nikaia')) ? 'Store 1' : ((_lbl.includes('Αιγάλεω') || _lbl.includes('Aigaleo')) ? 'Store 2' : _lbl);
           %>
-            <span class="badge" style="margin-left:8px;"><%= _mapped %></span>
+            <span class="badge badge-inline-store"><%= _mapped %></span>
           <% } %>
         </h1>
         <nav class="nav">

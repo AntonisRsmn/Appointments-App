@@ -242,6 +242,11 @@ input[type="time"]::-webkit-date-and-time-value { text-align: left; }
   .cell-actions .btn { width: 100%; }
 }
 
+/* Inline store badge aligns nicely with headings */
+.badge-inline-store {
+  position: relative;
+  top: -0.15em; /* nudge upward to visually center with heading */
+}
 /* Services picker (catalog) */
 .services { display: grid; grid-template-columns: 340px 1fr; gap: 20px; }
 .service-cats { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--surface); }
